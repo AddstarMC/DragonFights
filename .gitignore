@@ -2,6 +2,8 @@
 *.cmd
 *.sh
 *.prefs
+.paper-nms/
+.vscode/
 
 ### Maven ###
 /mvn
