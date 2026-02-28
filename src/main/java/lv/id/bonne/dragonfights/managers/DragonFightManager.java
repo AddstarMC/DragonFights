@@ -328,6 +328,10 @@ public class DragonFightManager
 	 */
 	public CustomDragonBattle createDragonBattle(World world, Island island)
 	{
+		Bukkit.getLogger().info("createDragonBattle: world=" + world.getName() +
+			" island=" + island.getUniqueId() + " center=" + island.getCenter() +
+			" boundingBox=" + island.getBoundingBox() + " range=" + island.getRange());
+
 		DragonFightsObject dragonFightsObject = this.getIslandData(island);
 		dragonFightsObject.setWorld(world);
 
@@ -338,10 +342,12 @@ public class DragonFightManager
 
 		if (dragonFightsObject.getPortalLocation() != null)
 		{
+			Bukkit.getLogger().info("Using saved portal location: " + dragonFightsObject.getPortalLocation());
 			dragonBattleBuilder.setPortalLocation(dragonFightsObject.getPortalLocation());
 		}
 		else
 		{
+			Bukkit.getLogger().info("No saved portal, using island center: " + island.getCenter().toVector());
 			dragonBattleBuilder.setPortalLocation(island.getCenter().toVector());
 		}
 
@@ -365,12 +371,18 @@ public class DragonFightManager
 
 		CustomDragonBattle battle = dragonBattleBuilder.build();
 
-		// start the battle
+		Bukkit.getLogger().info("dragonBattleBuilder.build() returned: " +
+			(battle != null ? battle.getClass().getSimpleName() : "NULL"));
 
 		if (battle != null)
 		{
 			this.generatedBattles.put(island.getUniqueId(), battle);
+			Bukkit.getLogger().info("Battle registered and tick task starting for island " + island.getUniqueId());
 			this.startBattleTask(dragonFightsObject, battle, 0);
+		}
+		else
+		{
+			Bukkit.getLogger().severe("Failed to build battle! Check builder parameters.");
 		}
 
 		return battle;
@@ -443,9 +455,8 @@ public class DragonFightManager
 	 */
 	public void grantAdvancements(Player player, Map<String, String> advancementList)
 	{
-		if (advancementList.isEmpty())
+		if (player == null || advancementList.isEmpty())
 		{
-			// No advancements in this category.
 			return;
 		}
 
@@ -507,15 +518,10 @@ public class DragonFightManager
 				int chunkX = this.battle.getLastDragonLocation().getBlockX() >> 4;
 				int chunkZ = this.battle.getLastDragonLocation().getBlockZ() >> 4;
 
-				// Get world.
 				World world = this.databaseObject.getWorld();
 
-				// Check if chunks are loaded try to find dragon entity.
 				if (world.isChunkLoaded(chunkX, chunkZ))
 				{
-					// Find entity with a given id.
-					// Wait 10 seconds till restart the dragon
-					// Dragon exists... load the battle
 					loadedChunks = this.ticksWithoutDragons++ > 10 * 20 ||
 						!world.getNearbyEntities(
 							this.battle.getLastDragonLocation().toLocation(world),
@@ -530,10 +536,16 @@ public class DragonFightManager
 				{
 					loadedChunks = false;
 				}
+
+				if (this.ticksWithoutDragons % 100 == 1)
+				{
+					Bukkit.getLogger().info("BattleTick: waiting for dragon chunk " +
+						chunkX + "," + chunkZ + " loaded=" + (world != null && world.isChunkLoaded(chunkX, chunkZ)) +
+						" ticksWithoutDragon=" + this.ticksWithoutDragons);
+				}
 			}
 			else
 			{
-				// No portal location means that battle must be force started.
 				loadedChunks = true;
 			}
 
@@ -543,9 +555,8 @@ public class DragonFightManager
 
 				if (this.battle.isFinished())
 				{
-					// Save data
+					Bukkit.getLogger().info("BattleTick: battle finished, calling finishTheBattle and cancelling task");
 					DragonFightManager.this.finishTheBattle(this.databaseObject, this.battle);
-					// Cancel task.
 					task.cancel();
 				}
 

@@ -1,4 +1,3 @@
-<?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
 		 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 		 xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
@@ -17,20 +16,32 @@
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-		<java.version>17</java.version>
+		<java.version>21</java.version>
 		<powermock.version>1.7.4</powermock.version>
-		<!-- More visible way how to change dependency versions -->
-		<spigot.version>1.20.4-R0.1-SNAPSHOT</spigot.version>
-		<bentobox.version>1.23.0</bentobox.version>
+		<!-- Paper 1.21.11 only; no Spigot -->
+		<paper.version>1.21.11-R0.1-SNAPSHOT</paper.version>
+		<!-- 3.10.1 is latest in Maven; 3.11.1 not yet published. Addon API compatible with 3.11.x -->
+		<bentobox.version>3.10.1</bentobox.version>
 		<level.version>2.5.0</level.version>
 		<!-- Revision variable removes warning about dynamic version -->
 		<revision>${build.version}-SNAPSHOT</revision>
 		<!-- This allows to change between versions and snapshots. -->
-		<build.version>1.8.1</build.version>
+		<build.version>1.9.0</build.version>
 		<build.number>-LOCAL</build.number>
 	</properties>
 
 	<profiles>
+		<!-- Local profile: use clean version in JAR name (DragonFights-1.9.0.jar) for easier verification -->
+		<profile>
+			<id>local</id>
+			<activation>
+				<activeByDefault>true</activeByDefault>
+			</activation>
+			<properties>
+				<revision>${build.version}</revision>
+				<build.number></build.number>
+			</properties>
+		</profile>
 		<!-- Build profile is activated by BUILD_NUMBER variable. It replaces
 			0 with correct build number. -->
 		<!-- This profile will be used only if BUILD_NUMBER environment variable
@@ -94,10 +105,16 @@
 
 	<repositories>
 		<repository>
-			<!-- This is a temporary reference as the Maven Shade plugin
-				that supports Java 16 is not released yet -->
+			<id>bentobox</id>
+			<url>https://repo.codemc.io/repository/bentoboxworld/</url>
+		</repository>
+		<repository>
 			<id>maven-snapshots</id>
 			<url>https://repository.apache.org/content/repositories/snapshots/</url>
+		</repository>
+		<repository>
+			<id>papermc</id>
+			<url>https://repo.papermc.io/repository/maven-public/</url>
 		</repository>
 		<repository>
 			<id>spigot-repo</id>
@@ -108,19 +125,21 @@
 			<url>https://repo.codemc.io/repository/maven-public</url>
 		</repository>
 		<repository>
-			<id>codemc-nms</id>
-			<url>https://repo.codemc.org/repository/nms/</url>
+			<id>bytecode</id>
+			<url>https://repo.bytecode.space/repository/maven-public/</url>
 		</repository>
 		<repository>
-			<id>github</id>
-			<name>GitHub BONNe Apache Maven Packages</name>
-			<url>https://maven.pkg.github.com/BONNePlayground/DragonFightsLibrary</url>
-		</repository>
-		<repository>
-			<id>papermc</id>
-			<url>https://repo.papermc.io/repository/maven-public/</url>
+			<id>stellardrift</id>
+			<url>https://repo.stellardrift.ca/repository/maven-public/</url>
 		</repository>
 	</repositories>
+
+	<pluginRepositories>
+		<pluginRepository>
+			<id>bytecode</id>
+			<url>https://repo.bytecode.space/repository/maven-public/</url>
+		</pluginRepository>
+	</pluginRepositories>
 
 	<distributionManagement>
 		<snapshotRepository>
@@ -141,9 +160,9 @@
 			<scope>provided</scope>
 		</dependency>
 		<dependency>
-			<groupId>org.spigotmc</groupId>
-			<artifactId>spigot-api</artifactId>
-			<version>${spigot.version}</version>
+			<groupId>io.papermc.paper</groupId>
+			<artifactId>paper-api</artifactId>
+			<version>${paper.version}</version>
 			<scope>provided</scope>
 		</dependency>
 		<dependency>
@@ -152,7 +171,21 @@
 			<version>1.2.3-SNAPSHOT</version>
 			<scope>provided</scope>
 		</dependency>
-		<!--   BentoBox dependencies.     -->
+		<!-- Mojang-mapped NMS for Paper 1.21.11 (run paper-nms:init once to generate) -->
+		<dependency>
+			<groupId>ca.bkaw</groupId>
+			<artifactId>paper-nms</artifactId>
+			<version>1.21.11-SNAPSHOT</version>
+			<scope>provided</scope>
+		</dependency>
+		<!-- Resolve Keyable/serialization used by Registry (paper-nms references but does not embed) -->
+		<dependency>
+			<groupId>com.mojang</groupId>
+			<artifactId>datafixerupper</artifactId>
+			<version>6.0.6</version>
+			<scope>provided</scope>
+		</dependency>
+		<!-- BentoBox: latest supporting Paper 1.21.11 -->
 		<dependency>
 			<groupId>world.bentobox</groupId>
 			<artifactId>bentobox</artifactId>
@@ -164,50 +197,6 @@
 			<artifactId>level</artifactId>
 			<version>${level.version}</version>
 			<scope>provided</scope>
-		</dependency>
-		<!--	Internal dependencies	-->
-		<!--	CustomEntity main API	-->
-		<dependency>
-			<groupId>io.github.iltotore</groupId>
-			<artifactId>customentity</artifactId>
-			<version>1.7.1</version>
-			<scope>compile</scope>
-		</dependency>
-		<dependency>
-			<groupId>lv.id.bonne</groupId>
-			<artifactId>dragonfights-v1_19_r1</artifactId>
-			<version>1.5.0</version>
-			<scope>compile</scope>
-		</dependency>
-		<dependency>
-			<groupId>lv.id.bonne</groupId>
-			<artifactId>dragonfights-v1_19_r2</artifactId>
-			<version>1.5.0</version>
-			<scope>compile</scope>
-		</dependency>
-		<dependency>
-			<groupId>lv.id.bonne</groupId>
-			<artifactId>dragonfights-v1_19_r3</artifactId>
-			<version>1.5.0</version>
-			<scope>compile</scope>
-		</dependency>
-		<dependency>
-			<groupId>lv.id.bonne</groupId>
-			<artifactId>dragonfights-v1_20_r1</artifactId>
-			<version>1.6.0</version>
-			<scope>compile</scope>
-		</dependency>
-		<dependency>
-			<groupId>lv.id.bonne</groupId>
-			<artifactId>dragonfights-v1_20_r2</artifactId>
-			<version>1.7.0</version>
-			<scope>compile</scope>
-		</dependency>
-		<dependency>
-			<groupId>lv.id.bonne</groupId>
-			<artifactId>dragonfights-v1_20_r3</artifactId>
-			<version>1.7.0</version>
-			<scope>compile</scope>
 		</dependency>
 	</dependencies>
 
@@ -235,6 +224,45 @@
 			</resource>
 		</resources>
 		<plugins>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-enforcer-plugin</artifactId>
+				<version>3.4.1</version>
+				<executions>
+					<execution>
+						<id>require-java-21</id>
+						<goals>
+							<goal>enforce</goal>
+						</goals>
+						<phase>validate</phase>
+						<configuration>
+							<rules>
+								<requireJavaVersion>
+									<message>Project requires JDK 21 to build (Paper API and paper-nms use Java 21). Set JAVA_HOME to JDK 21 (e.g. export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64).</message>
+									<version>[21,)</version>
+								</requireJavaVersion>
+							</rules>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+			<plugin>
+				<groupId>ca.bkaw</groupId>
+				<artifactId>paper-nms-maven-plugin</artifactId>
+				<version>1.4.10</version>
+				<configuration>
+					<gameVersion>1.21.11</gameVersion>
+				</configuration>
+				<executions>
+					<execution>
+						<id>init</id>
+						<phase>initialize</phase>
+						<goals>
+							<goal>init</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-clean-plugin</artifactId>
@@ -285,13 +313,12 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-shade-plugin</artifactId>
-				<version>3.3.1-SNAPSHOT</version>
+				<version>3.6.0</version>
 				<configuration>
 					<minimizeJar>true</minimizeJar>
 					<artifactSet>
 						<includes>
-							<include>io.github.iltotore:customentity:*</include>
-							<include>lv.id.bonne:*:*</include>
+							<!-- No external NMS modules; 1.21 code is in-tree -->
 						</includes>
 					</artifactSet>
 					<transformers>

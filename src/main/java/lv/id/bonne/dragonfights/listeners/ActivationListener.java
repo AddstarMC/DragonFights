@@ -137,10 +137,10 @@ public class ActivationListener implements Listener
 		// Summon crystals.
 		World world = event.getPlayer().getWorld();
 
-		world.spawnEntity(generatedPortalLocation.toLocation(world).add(3.5, 1, 0.5), EntityType.ENDER_CRYSTAL);
-		world.spawnEntity(generatedPortalLocation.toLocation(world).add(-2.5, 1, 0.5), EntityType.ENDER_CRYSTAL);
-		world.spawnEntity(generatedPortalLocation.toLocation(world).add(0.5, 1, 3.5), EntityType.ENDER_CRYSTAL);
-		world.spawnEntity(generatedPortalLocation.toLocation(world).add(0.5, 1, -2.5), EntityType.ENDER_CRYSTAL);
+		world.spawnEntity(generatedPortalLocation.toLocation(world).add(3.5, 1, 0.5), EntityType.END_CRYSTAL);
+		world.spawnEntity(generatedPortalLocation.toLocation(world).add(-2.5, 1, 0.5), EntityType.END_CRYSTAL);
+		world.spawnEntity(generatedPortalLocation.toLocation(world).add(0.5, 1, 3.5), EntityType.END_CRYSTAL);
+		world.spawnEntity(generatedPortalLocation.toLocation(world).add(0.5, 1, -2.5), EntityType.END_CRYSTAL);
 		// The battle should start.
 	}
 
@@ -152,29 +152,31 @@ public class ActivationListener implements Listener
 	@EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
 	public void onCrystalPlacement(EntitySpawnEvent event)
 	{
-		if (event.getEntityType() != EntityType.ENDER_CRYSTAL)
+		if (event.getEntityType() != EntityType.END_CRYSTAL)
 		{
-			// Not an ender crystal.
 			return;
 		}
 
 		World world = event.getLocation().getWorld();
+		Bukkit.getLogger().info("END_CRYSTAL spawned at " + event.getLocation());
 
 		if (world == null || !this.addon.getPlugin().getIWM().isIslandEnd(world))
 		{
-			// Not a bentobox end island.
+			Bukkit.getLogger().info("Crystal: not in BentoBox end island world (world=" +
+				(world != null ? world.getName() : "null") + ")");
 			return;
 		}
 
 		if (!this.addon.getAddonManager().operatesInWorld(world))
 		{
-			// Not operating in given gamemode.
+			Bukkit.getLogger().info("Crystal: addon not operating in world " + world.getName());
 			return;
 		}
 
 		if (event.getLocation().getBlock().getRelative(BlockFace.DOWN).getType() != Material.BEDROCK)
 		{
-			// Not on the bedrock.
+			Bukkit.getLogger().info("Crystal: block below is " +
+				event.getLocation().getBlock().getRelative(BlockFace.DOWN).getType() + ", not BEDROCK");
 			return;
 		}
 
@@ -183,40 +185,47 @@ public class ActivationListener implements Listener
 
 		if (!optionalIsland.isPresent())
 		{
-			// Not on the island
+			Bukkit.getLogger().info("Crystal: no island at location " + location);
 			return;
 		}
 
 		Island island = optionalIsland.get();
+		Bukkit.getLogger().info("Crystal: island=" + island.getUniqueId() +
+			" center=" + island.getCenter() + " range=" + island.getRange());
 
 		if (island.getCenter().getBlockX() == 0 && island.getCenter().getBlockZ() == 0)
 		{
-			// Dragon should not operate for 0, 0 island because that spot is reserved for
-			// vanilla ender dragon.
+			Bukkit.getLogger().info("Crystal: skipping 0,0 island (reserved for vanilla)");
 			return;
 		}
 
 		Optional<CustomDragonBattle> optionalBattle =
 			this.addonManager.getDragonBattle(island.getUniqueId());
 
+		Bukkit.getLogger().info("Crystal: existing battle present=" + optionalBattle.isPresent());
+
 		CustomDragonBattle battle = optionalBattle.orElseGet(() ->
 			this.addonManager.createDragonBattle(location.getWorld(), island));
 
 		if (battle == null)
 		{
-			// TODO: Error message. Something went wrong.
+			Bukkit.getLogger().severe("Crystal: FAILED to create/get battle! createDragonBattle returned null");
 			return;
 		}
 
+		Bukkit.getLogger().info("Crystal: battle.isFinished()=" + battle.isFinished() +
+			" battle.isGenerated()=" + battle.isGenerated());
+
 		if (battle.isFinished())
 		{
-			// Restart battle ticking, as new crystal will be placed.
+			Bukkit.getLogger().info("Crystal: restarting finished battle tick task");
 			this.addonManager.startBattleTask(this.addonManager.getIslandData(island), battle, 0);
 		}
 
-		// If battle is present then pass crystal placement to it 1 tick later.
 		Bukkit.getScheduler().runTask(this.addon.getPlugin(),
 			tick -> battle.onCrystalPlacement((EnderCrystal) event.getEntity()));
+
+		Bukkit.getLogger().info("Crystal: onCrystalPlacement callback scheduled for next tick");
 	}
 
 
@@ -227,7 +236,7 @@ public class ActivationListener implements Listener
 	@EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
 	public void onCrystalDamage(EntityDamageEvent event)
 	{
-		if (event.getEntityType() != EntityType.ENDER_CRYSTAL)
+		if (event.getEntityType() != EntityType.END_CRYSTAL)
 		{
 			// Not an ender crystal.
 			return;

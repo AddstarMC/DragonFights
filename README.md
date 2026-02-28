@@ -6,8 +6,16 @@ This is DragonFights Addon for BentoBox plugin.
 
 # INFO
 
-This addon does not work past Minecraft 1.20.4 due to changes how Minecraft handles entity registry. It used a loophole that allowed the introduction of a custom vanilla entity with custom AI tasks.
-Unfortunately, they removed it, so the addon needs a complete rework so it would use Vanilla EnderDragon AI.
+**Paper 1.21.11 only.** This addon has been rewritten for PaperMC 1.21.11 and no longer supports older versions. It registers a custom Ender Dragon entity and uses the BentoBox dragon battle system per island. The dragon uses vanilla EnderDragon behavior; custom phase AI can be re-added in a future update.
+
+## Building
+
+Building requires **JDK 21**. Set `JAVA_HOME` to your JDK 21 installation before running Maven. On first build (or after a clean), run `mvn paper-nms:init` once so the paper-nms dependency is generated; the build also runs this in the `initialize` phase.
+
+```bash
+export JAVA_HOME=/path/to/jdk-21   # e.g. /usr/lib/jvm/java-21-openjdk-amd64
+mvn clean package
+```
 
 ## How to install
 

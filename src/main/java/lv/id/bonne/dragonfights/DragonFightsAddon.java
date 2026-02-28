@@ -6,7 +6,7 @@ import org.bukkit.World;
 import java.util.Optional;
 
 
-import io.github.iltotore.customentity.CustomRegistry;
+import lv.id.bonne.dragonfights.api.CustomRegistry;
 import lv.id.bonne.dragonfights.config.Settings;
 import lv.id.bonne.dragonfights.entity.BentoBoxEnderDragonRoot;
 import lv.id.bonne.dragonfights.entity.CustomEntityAPI;
@@ -39,6 +39,7 @@ public class DragonFightsAddon extends Addon
 	@Override
 	public void onLoad()
 	{
+		Bukkit.getLogger().info("[DragonFights] DragonFights addon loading (debug: new addon build)");
 		// Registration must happen regardless of addon enabling status.
 		CustomRegistry registry = CustomEntityAPI.getAPI().getRegistry();
 		registry.register(new BentoBoxEnderDragonRoot());
@@ -144,7 +145,7 @@ public class DragonFightsAddon extends Addon
 
 		// Placeholder returns currently active count.
 		this.getPlugin().getPlaceholdersManager().registerPlaceholder(addon,
-			addonName + "_killed_dragon_count",
+			addonName + "_killed",
 			user ->
 			{
 				Island island = this.getIslands().getIsland(world, user);
@@ -160,9 +161,9 @@ public class DragonFightsAddon extends Addon
 				}
 			});
 
-		// Placeholder returns maximal active generator count, that user can activate.
+		// Placeholder returns kill count for the island the user is currently visiting.
 		this.getPlugin().getPlaceholdersManager().registerPlaceholder(addon,
-			addonName + "_visited_killed_dragon_count",
+			addonName + "_visiting_killed",
 			user ->
 			{
 				if (!addon.inWorld(user.getLocation()))
@@ -174,6 +175,44 @@ public class DragonFightsAddon extends Addon
 				return this.getIslands().getIslandAt(user.getLocation()).
 					map(island -> String.valueOf(this.getAddonManager().getIslandData(island).getDragonsKilled())).
 					orElse("0");
+			});
+
+		// Placeholder returns whether a dragon is currently alive on the user's island.
+		this.getPlugin().getPlaceholdersManager().registerPlaceholder(addon,
+			addonName + "_alive",
+			user ->
+			{
+				Island island = this.getIslands().getIsland(world, user);
+
+				if (island != null)
+				{
+					return String.valueOf(
+						this.getAddonManager().getDragonBattle(island.getUniqueId())
+							.map(battle -> !battle.isFinished())
+							.orElse(false));
+				}
+				else
+				{
+					return "false";
+				}
+			});
+
+		// Placeholder returns whether a dragon is currently alive on the visited island.
+		this.getPlugin().getPlaceholdersManager().registerPlaceholder(addon,
+			addonName + "_visiting_alive",
+			user ->
+			{
+				if (!addon.inWorld(user.getLocation()))
+				{
+					return "";
+				}
+
+				return this.getIslands().getIslandAt(user.getLocation()).
+					map(island -> String.valueOf(
+						this.getAddonManager().getDragonBattle(island.getUniqueId())
+							.map(battle -> !battle.isFinished())
+							.orElse(false))).
+					orElse("false");
 			});
 	}
 

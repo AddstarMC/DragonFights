@@ -157,7 +157,7 @@ public class Utils
 			{
 				EnderDragon dragon = (EnderDragon) entity;
 
-				AttributeInstance maxHealth = dragon.getAttribute(Attribute.GENERIC_MAX_HEALTH);
+				AttributeInstance maxHealth = dragon.getAttribute(Attribute.MAX_HEALTH);
 
 				if (maxHealth == null)
 				{

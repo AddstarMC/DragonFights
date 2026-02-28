@@ -1,4 +1,4 @@
-# DragonFights Configuration 1.1.0
+# DragonFights Configuration 1.9.0
 # This config file is dynamic and saved when the server is shutdown.
 #
 boss-bar:
@@ -26,8 +26,8 @@ battle:
   # Default value is 40.
   tower-distance: 40
   # Minimal height for the tower.
-  # Default value is 120.
-  tower-min-height: 120
+  # Default value is 100.
+  tower-min-height: 100
   # Maximal height for the tower.
   # Default value is 150.
   tower-max-height: 150
@@ -43,6 +43,14 @@ battle:
   # Battle Seed is a semi-random number that generates towers in the end.
   # This allows to give equal arena for each player.
   battle-seed: 0
+dragon-egg:
+  # Whether to always drop a dragon egg when the dragon is killed for the first time on an island.
+  # Default value is true.
+  drop-on-first-kill: true
+  # The chance (0.0 to 1.0) to drop a dragon egg on subsequent kills.
+  # 0.0 means never, 1.0 means always.
+  # Default value is 0.2 (20%).
+  drop-chance: 0.2
 advancements:
   # Set of advancements that will be granted upon summoning dragon for the first time.
   # This will be granted to all players who is in the end when dragon is summoned.

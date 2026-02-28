@@ -321,6 +321,50 @@ public class Settings implements ConfigObject
 
 
 	/**
+	 * Gets whether a dragon egg should drop on the first kill.
+	 *
+	 * @return true if egg should drop on first kill
+	 */
+	public boolean isDropEggOnFirstKill()
+	{
+		return dropEggOnFirstKill;
+	}
+
+
+	/**
+	 * Sets whether a dragon egg should drop on the first kill.
+	 *
+	 * @param dropEggOnFirstKill the drop egg on first kill flag
+	 */
+	public void setDropEggOnFirstKill(boolean dropEggOnFirstKill)
+	{
+		this.dropEggOnFirstKill = dropEggOnFirstKill;
+	}
+
+
+	/**
+	 * Gets the egg drop chance for subsequent kills.
+	 *
+	 * @return the egg drop chance (0.0 to 1.0)
+	 */
+	public double getEggDropChance()
+	{
+		return eggDropChance;
+	}
+
+
+	/**
+	 * Sets the egg drop chance for subsequent kills.
+	 *
+	 * @param eggDropChance the egg drop chance (0.0 to 1.0)
+	 */
+	public void setEggDropChance(double eggDropChance)
+	{
+		this.eggDropChance = eggDropChance;
+	}
+
+
+	/**
 	 * Gets summon advancement list.
 	 *
 	 * @return the summon advancement list
@@ -476,6 +520,17 @@ public class Settings implements ConfigObject
 	@ConfigComment("This allows to give equal arena for each player.")
 	@ConfigEntry(path = "battle.battle-seed")
 	private long battleSeed = 0;
+
+	@ConfigComment("Whether to always drop a dragon egg when the dragon is killed for the first time on an island.")
+	@ConfigComment("Default value is true.")
+	@ConfigEntry(path = "dragon-egg.drop-on-first-kill")
+	private boolean dropEggOnFirstKill = true;
+
+	@ConfigComment("The chance (0.0 to 1.0) to drop a dragon egg on subsequent kills.")
+	@ConfigComment("0.0 means never, 1.0 means always.")
+	@ConfigComment("Default value is 0.2 (20%).")
+	@ConfigEntry(path = "dragon-egg.drop-chance")
+	private double eggDropChance = 0.2;
 
 	@ConfigComment("Set of advancements that will be granted upon summoning dragon for the first time.")
 	@ConfigComment("This will be granted to all players who is in the end when dragon is summoned.")
