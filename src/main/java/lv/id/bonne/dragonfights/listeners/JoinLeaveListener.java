@@ -7,10 +7,13 @@
 package lv.id.bonne.dragonfights.listeners;
 
 
+import org.bukkit.World;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 
 
 import lv.id.bonne.dragonfights.DragonFightsAddon;
@@ -40,8 +43,43 @@ public class JoinLeaveListener implements Listener
 	@EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
 	public void onPlayerJoin(PlayerJoinEvent event)
 	{
-		// Load player into cache
 		this.addon.getAddonManager().loadUserIslands(event.getPlayer().getUniqueId());
+
+		if (World.Environment.THE_END.equals(event.getPlayer().getWorld().getEnvironment()))
+		{
+			this.addon.getAddonManager().checkTickTaskNeeded();
+		}
+	}
+
+
+	/**
+	 * Pauses or resumes the battle tick task when a player leaves the server.
+	 * @param event PlayerQuitEvent instance.
+	 */
+	@EventHandler(priority = EventPriority.MONITOR)
+	public void onPlayerQuit(PlayerQuitEvent event)
+	{
+		if (World.Environment.THE_END.equals(event.getPlayer().getWorld().getEnvironment()))
+		{
+			this.addon.getAddonManager().checkTickTaskNeeded();
+		}
+	}
+
+
+	/**
+	 * Pauses or resumes the battle tick task when a player changes worlds.
+	 * @param event PlayerChangedWorldEvent instance.
+	 */
+	@EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+	public void onWorldChange(PlayerChangedWorldEvent event)
+	{
+		boolean wasEnd = World.Environment.THE_END.equals(event.getFrom().getEnvironment());
+		boolean isEnd = World.Environment.THE_END.equals(event.getPlayer().getWorld().getEnvironment());
+
+		if (wasEnd || isEnd)
+		{
+			this.addon.getAddonManager().checkTickTaskNeeded();
+		}
 	}
 
 

@@ -17,16 +17,16 @@
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-		<java.version>17</java.version>
+		<java.version>21</java.version>
 		<powermock.version>1.7.4</powermock.version>
 		<!-- More visible way how to change dependency versions -->
-		<spigot.version>1.20.4-R0.1-SNAPSHOT</spigot.version>
+		<paper.version>1.21.11-SNAPSHOT</paper.version>
 		<bentobox.version>1.23.0</bentobox.version>
 		<level.version>2.5.0</level.version>
 		<!-- Revision variable removes warning about dynamic version -->
 		<revision>${build.version}-SNAPSHOT</revision>
 		<!-- This allows to change between versions and snapshots. -->
-		<build.version>1.8.1</build.version>
+		<build.version>1.9.0</build.version>
 		<build.number>-LOCAL</build.number>
 	</properties>
 
@@ -67,12 +67,6 @@
 				<!-- Empties build.number value -->
 				<build.number></build.number>
 			</properties>
-			<distributionManagement>
-				<repository>
-					<id>github</id>
-					<url>https://maven.pkg.github.com/BONNePlayground/DragonFights</url>
-				</repository>
-			</distributionManagement>
 		</profile>
 	</profiles>
 
@@ -94,10 +88,8 @@
 
 	<repositories>
 		<repository>
-			<!-- This is a temporary reference as the Maven Shade plugin
-				that supports Java 16 is not released yet -->
-			<id>maven-snapshots</id>
-			<url>https://repository.apache.org/content/repositories/snapshots/</url>
+			<id>bytecode-repo</id>
+			<url>https://repo.bytecode.space/repository/maven-public/</url>
 		</repository>
 		<repository>
 			<id>spigot-repo</id>
@@ -108,19 +100,21 @@
 			<url>https://repo.codemc.io/repository/maven-public</url>
 		</repository>
 		<repository>
-			<id>codemc-nms</id>
-			<url>https://repo.codemc.org/repository/nms/</url>
-		</repository>
-		<repository>
-			<id>github</id>
-			<name>GitHub BONNe Apache Maven Packages</name>
-			<url>https://maven.pkg.github.com/BONNePlayground/DragonFightsLibrary</url>
-		</repository>
-		<repository>
 			<id>papermc</id>
 			<url>https://repo.papermc.io/repository/maven-public/</url>
 		</repository>
+		<repository>
+			<id>minecraft-libraries</id>
+			<url>https://libraries.minecraft.net</url>
+		</repository>
 	</repositories>
+
+	<pluginRepositories>
+		<pluginRepository>
+			<id>bytecode-repo</id>
+			<url>https://repo.bytecode.space/repository/maven-public/</url>
+		</pluginRepository>
+	</pluginRepositories>
 
 	<distributionManagement>
 		<snapshotRepository>
@@ -141,9 +135,21 @@
 			<scope>provided</scope>
 		</dependency>
 		<dependency>
-			<groupId>org.spigotmc</groupId>
-			<artifactId>spigot-api</artifactId>
-			<version>${spigot.version}</version>
+			<groupId>io.papermc.paper</groupId>
+			<artifactId>paper-api</artifactId>
+			<version>1.21.11-R0.1-SNAPSHOT</version>
+			<scope>provided</scope>
+		</dependency>
+		<dependency>
+			<groupId>ca.bkaw</groupId>
+			<artifactId>paper-nms</artifactId>
+			<version>${paper.version}</version>
+			<scope>provided</scope>
+		</dependency>
+		<dependency>
+			<groupId>com.mojang</groupId>
+			<artifactId>datafixerupper</artifactId>
+			<version>9.0.19</version>
 			<scope>provided</scope>
 		</dependency>
 		<dependency>
@@ -164,50 +170,6 @@
 			<artifactId>level</artifactId>
 			<version>${level.version}</version>
 			<scope>provided</scope>
-		</dependency>
-		<!--	Internal dependencies	-->
-		<!--	CustomEntity main API	-->
-		<dependency>
-			<groupId>io.github.iltotore</groupId>
-			<artifactId>customentity</artifactId>
-			<version>1.7.1</version>
-			<scope>compile</scope>
-		</dependency>
-		<dependency>
-			<groupId>lv.id.bonne</groupId>
-			<artifactId>dragonfights-v1_19_r1</artifactId>
-			<version>1.5.0</version>
-			<scope>compile</scope>
-		</dependency>
-		<dependency>
-			<groupId>lv.id.bonne</groupId>
-			<artifactId>dragonfights-v1_19_r2</artifactId>
-			<version>1.5.0</version>
-			<scope>compile</scope>
-		</dependency>
-		<dependency>
-			<groupId>lv.id.bonne</groupId>
-			<artifactId>dragonfights-v1_19_r3</artifactId>
-			<version>1.5.0</version>
-			<scope>compile</scope>
-		</dependency>
-		<dependency>
-			<groupId>lv.id.bonne</groupId>
-			<artifactId>dragonfights-v1_20_r1</artifactId>
-			<version>1.6.0</version>
-			<scope>compile</scope>
-		</dependency>
-		<dependency>
-			<groupId>lv.id.bonne</groupId>
-			<artifactId>dragonfights-v1_20_r2</artifactId>
-			<version>1.7.0</version>
-			<scope>compile</scope>
-		</dependency>
-		<dependency>
-			<groupId>lv.id.bonne</groupId>
-			<artifactId>dragonfights-v1_20_r3</artifactId>
-			<version>1.7.0</version>
-			<scope>compile</scope>
 		</dependency>
 	</dependencies>
 
@@ -248,16 +210,22 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-compiler-plugin</artifactId>
-				<version>3.7.0</version>
+				<version>3.13.0</version>
 				<configuration>
-					<source>${java.version}</source>
-					<target>${java.version}</target>
+					<release>${java.version}</release>
 				</configuration>
 			</plugin>
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-jar-plugin</artifactId>
-				<version>3.1.0</version>
+				<version>3.4.1</version>
+				<configuration>
+					<archive>
+						<manifestEntries>
+							<paperweight-mappings-namespace>mojang</paperweight-mappings-namespace>
+						</manifestEntries>
+					</archive>
+				</configuration>
 			</plugin>
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
@@ -283,38 +251,9 @@
 				<version>2.8.2</version>
 			</plugin>
 			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-shade-plugin</artifactId>
-				<version>3.3.1-SNAPSHOT</version>
-				<configuration>
-					<minimizeJar>true</minimizeJar>
-					<artifactSet>
-						<includes>
-							<include>io.github.iltotore:customentity:*</include>
-							<include>lv.id.bonne:*:*</include>
-						</includes>
-					</artifactSet>
-					<transformers>
-						<!-- Add a transformer to exclude any other manifest files (possibly from dependencies). -->
-						<transformer implementation="org.apache.maven.plugins.shade.resource.DontIncludeResourceTransformer">
-							<resource>MANIFEST.MF</resource>
-						</transformer>
-						<!-- Add a transformer to include your custom manifest file. -->
-						<transformer implementation="org.apache.maven.plugins.shade.resource.IncludeResourceTransformer">
-							<resource>META-INF/MANIFEST.MF</resource>
-							<file>src/main/resources/META-INF/MANIFEST.MF</file>
-						</transformer>
-					</transformers>
-				</configuration>
-				<executions>
-					<execution>
-						<id>shade</id>
-						<goals>
-							<goal>shade</goal>
-						</goals>
-						<phase>package</phase>
-					</execution>
-				</executions>
+				<groupId>ca.bkaw</groupId>
+				<artifactId>paper-nms-maven-plugin</artifactId>
+				<version>1.4.10</version>
 			</plugin>
 		</plugins>
 	</build>

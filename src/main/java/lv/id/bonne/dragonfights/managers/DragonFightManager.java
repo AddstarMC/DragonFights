@@ -8,21 +8,24 @@ package lv.id.bonne.dragonfights.managers;
 
 
 import org.bukkit.Bukkit;
+import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.World;
 import org.bukkit.advancement.Advancement;
 import org.bukkit.advancement.AdvancementProgress;
-import org.bukkit.entity.EntityType;
+import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitTask;
+import org.bukkit.util.Vector;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import java.util.*;
-import java.util.function.Consumer;
+import java.util.concurrent.ThreadLocalRandom;
 
 import lv.id.bonne.custombattle.CustomDragonBattle;
 import lv.id.bonne.custombattle.DragonBattleBuilder;
 import lv.id.bonne.dragonfights.DragonFightsAddon;
+import lv.id.bonne.dragonfights.config.DragonCharacteristic;
 import lv.id.bonne.dragonfights.database.objects.DragonFightsObject;
 import lv.id.bonne.dragonfights.entity.CustomEntityAPI;
 import lv.id.bonne.dragonfights.utils.Constants;
@@ -50,6 +53,7 @@ public class DragonFightManager
 		this.dragonFightsCache = new HashMap<>();
 
 		this.generatedBattles = new HashMap<>();
+		this.portalCleanupState = new HashMap<>();
 	}
 
 
@@ -85,26 +89,144 @@ public class DragonFightManager
 
 	/**
 	 * This method saves every active battle.
+	 * During shutdown, Bukkit's scheduler is already stopped so the normal async
+	 * database writes will never execute. We queue the writes via the normal API
+	 * (which serializes the JSON on the calling thread) and then drain the
+	 * handler's internal processQueue synchronously to flush them to disk.
 	 */
 	public void save()
 	{
+		this.stopTickTask();
+
+		this.addon.log("save() called. Active battles: " + this.generatedBattles.size() +
+			", cached objects: " + this.dragonFightsCache.size());
+
 		this.generatedBattles.forEach((s, battle) -> {
-			DragonFightsObject data = this.getIslandData(s);
-
-			if (data != null)
+			try
 			{
-				Optional<Island> islandById = this.addon.getIslands().getIslandById(data.getUniqueId());
-				World world = islandById.get().getWorld();
+				DragonFightsObject data = this.getIslandData(s);
 
-				data.setLatestBattleData(battle.saveData());
-				data.setPortalLocation(battle.getGeneratedPortalLocation());
-				data.setWorld(this.addon.getPlugin().getIWM().getEndWorld(world));
+				if (data != null)
+				{
+					Optional<Island> islandById = this.addon.getIslands().getIslandById(data.getUniqueId());
+
+					if (islandById.isEmpty())
+					{
+						this.addon.logWarning("save(): Island not found for id=" + data.getUniqueId());
+						return;
+					}
+
+					World world = islandById.get().getWorld();
+
+					String battleData = battle.saveData();
+					data.setLatestBattleData(battleData);
+					data.setPortalLocation(battle.getGeneratedPortalLocation());
+					data.setWorld(this.addon.getPlugin().getIWM().getEndWorld(world));
+
+					this.addon.log("save(): Battle '" + s + "' stage=" +
+						(battle.isFinished() ? "END" : "active") +
+						" dragonUUID=" + battle.getLastDragonUUID() +
+						" portal=" + battle.getGeneratedPortalLocation() +
+						" world=" + data.getWorld() +
+						" dataLength=" + (battleData != null ? battleData.length() : 0));
+				}
+				else
+				{
+					this.addon.logWarning("save(): No DragonFightsObject found for battle key=" + s);
+				}
+			}
+			catch (Exception ex)
+			{
+				this.addon.logError("save(): Failed to serialize battle key=" + s + ": " + ex.getMessage());
+				ex.printStackTrace();
 			}
 		});
 
-		// Save all dragons fights objects from cache to the database.
-		this.dragonFightsCache.forEach((id, dragonFightsObject) ->
-			this.dragonFightsDatabase.saveObjectAsync(dragonFightsObject));
+		// Only queue saves for objects with active battles (these are the only ones modified).
+		this.generatedBattles.keySet().forEach(id ->
+		{
+			DragonFightsObject obj = this.dragonFightsCache.get(id);
+
+			if (obj != null)
+			{
+				try
+				{
+					this.addon.log("save(): Queueing write for id=" + id +
+						" hasBattleData=" + (obj.getLatestBattleData() != null &&
+							!obj.getLatestBattleData().isEmpty()));
+					this.dragonFightsDatabase.saveObjectAsync(obj);
+				}
+				catch (Exception ex)
+				{
+					this.addon.logError("save(): Failed to queue object id=" + id + ": " + ex.getMessage());
+					ex.printStackTrace();
+				}
+			}
+		});
+
+		// During shutdown, Bukkit's scheduler is already dead so the handler's
+		// async queue processor will never fire. Drain it manually on the main thread.
+		this.flushDatabaseQueue();
+
+		this.addon.log("save() complete.");
+	}
+
+
+	/**
+	 * Drains the BentoBox JSON database handler's internal processQueue,
+	 * running all pending writes synchronously on the calling thread.
+	 * This is necessary during server shutdown when the Bukkit scheduler
+	 * that normally processes the queue has already been cancelled.
+	 */
+	@SuppressWarnings("unchecked")
+	private void flushDatabaseQueue()
+	{
+		try
+		{
+			java.lang.reflect.Field handlerField =
+				Database.class.getDeclaredField("handler");
+			handlerField.setAccessible(true);
+			Object handler = handlerField.get(this.dragonFightsDatabase);
+
+			java.lang.reflect.Field queueField = null;
+
+			for (Class<?> c = handler.getClass(); c != null && c != Object.class; c = c.getSuperclass())
+			{
+				try
+				{
+					queueField = c.getDeclaredField("processQueue");
+					break;
+				}
+				catch (NoSuchFieldException ignored)
+				{
+				}
+			}
+
+			if (queueField == null)
+			{
+				this.addon.logWarning("save(): Could not find processQueue field — database writes may be lost");
+				return;
+			}
+
+			queueField.setAccessible(true);
+			Queue<Runnable> queue = (Queue<Runnable>) queueField.get(handler);
+
+			int flushed = 0;
+			Runnable task;
+
+			while ((task = queue.poll()) != null)
+			{
+				task.run();
+				flushed++;
+			}
+
+			this.addon.log("save(): Flushed " + flushed + " pending database writes to disk.");
+		}
+		catch (Exception ex)
+		{
+			this.addon.logError("save(): Failed to flush database queue: " + ex.getMessage());
+			ex.printStackTrace();
+		}
 	}
 
 
@@ -113,18 +235,20 @@ public class DragonFightManager
 	 */
 	public void load()
 	{
-		this.dragonFightsDatabase.loadObjects().forEach(dragonFightsObject -> {
-			// Load into cache.
+		this.addon.log("load() called. operationWorlds: " + this.operationWorlds.size());
+
+		List<DragonFightsObject> objects = this.dragonFightsDatabase.loadObjects();
+		this.addon.log("load(): Loaded " + objects.size() + " objects from database.");
+
+		objects.forEach(dragonFightsObject -> {
 			this.dragonFightsCache.put(dragonFightsObject.getUniqueId(), dragonFightsObject);
 
-			// If there was an active battle, put it into start list.
 			if (dragonFightsObject.getLatestBattleData() != null &&
 				!dragonFightsObject.getLatestBattleData().isEmpty())
 			{
 				DragonBattleBuilder builder =
 					CustomEntityAPI.getAPI().createDragonBattleBuilder(dragonFightsObject.getUniqueId());
 
-				// Fixes a crash when addon tries to load in non-existing world.
 				if (this.addon.getAddonManager().operatesInWorld(dragonFightsObject.getWorld()))
 				{
 					builder.setWorld(dragonFightsObject.getWorld());
@@ -132,21 +256,40 @@ public class DragonFightManager
 					CustomDragonBattle customDragonBattle =
 						builder.buildFromNBT(dragonFightsObject.getLatestBattleData());
 
-					this.generatedBattles.put(dragonFightsObject.getUniqueId(), customDragonBattle);
+					this.addon.log("load(): buildFromNBT result=" +
+						(customDragonBattle != null ? "OK" : "NULL") +
+						" for id=" + dragonFightsObject.getUniqueId());
 
 					if (customDragonBattle != null)
 					{
-						// Start the battle with 5 sec delay.
-						this.startBattleTask(dragonFightsObject, customDragonBattle, 20 * 5);
+						this.generatedBattles.put(dragonFightsObject.getUniqueId(), customDragonBattle);
+
+						if (dragonFightsObject.getDragonsKilled() == 0)
+						{
+							this.portalCleanupState.put(dragonFightsObject.getUniqueId(), new int[]{0});
+						}
+
+						this.addon.log("load(): Restored battle for id=" +
+							dragonFightsObject.getUniqueId() +
+							" dragonUUID=" + customDragonBattle.getLastDragonUUID() +
+							" dragonLoc=" + customDragonBattle.getLastDragonLocation());
 					}
 				}
 				else
 				{
-					// remove fight from cache.
+					this.addon.logWarning("load(): operatesInWorld=false for world=" +
+						dragonFightsObject.getWorld() + " id=" + dragonFightsObject.getUniqueId());
 					this.dragonFightsCache.remove(dragonFightsObject.getUniqueId());
 				}
 			}
 		});
+
+		this.addon.log("load() complete. Active battles: " + this.generatedBattles.size());
+
+		if (!this.generatedBattles.isEmpty())
+		{
+			this.checkTickTaskNeeded();
+		}
 	}
 
 
@@ -299,6 +442,18 @@ public class DragonFightManager
 
 
 	/**
+	 * Returns whether a dragon is currently alive (battle active with a spawned dragon) for the given island.
+	 * @param islandUniqueId The island unique id.
+	 * @return true if a dragon battle is active and the dragon has been spawned.
+	 */
+	public boolean isDragonAlive(String islandUniqueId)
+	{
+		CustomDragonBattle battle = this.generatedBattles.get(islandUniqueId);
+		return battle != null && battle.getLastDragonUUID() != null && !battle.isFinished();
+	}
+
+
+	/**
 	 * This method generates dragon name based on island owner localization.
 	 * @param island Island which dragon name must be generated.
 	 * @return String of dragon name for the island.
@@ -332,7 +487,7 @@ public class DragonFightManager
 		dragonFightsObject.setWorld(world);
 
 		DragonBattleBuilder dragonBattleBuilder = CustomEntityAPI.getAPI().createDragonBattleBuilder(island.getUniqueId());
-		dragonBattleBuilder.setDragonKilled(true);
+		dragonBattleBuilder.setDragonKilled(dragonFightsObject.getDragonsKilled() > 0);
 		dragonBattleBuilder.setPreviouslyKilled(dragonFightsObject.getDragonsKilled() > 0);
 		dragonBattleBuilder.setWorld(world);
 
@@ -363,6 +518,29 @@ public class DragonFightManager
 		dragonBattleBuilder.setBossBarColor(this.addon.getSettings().getBossBarColour());
 		dragonBattleBuilder.setBossBarText(this.generateDragonName(island));
 
+		List<String> characteristicStrings = this.addon.getSettings().getDragonCharacteristics();
+
+		if (characteristicStrings != null && !characteristicStrings.isEmpty())
+		{
+			List<DragonCharacteristic> validCharacteristics = characteristicStrings.stream()
+				.map(DragonCharacteristic::parse)
+				.filter(Objects::nonNull)
+				.toList();
+
+			if (!validCharacteristics.isEmpty())
+			{
+				DragonCharacteristic selected = validCharacteristics.get(
+					ThreadLocalRandom.current().nextInt(validCharacteristics.size()));
+
+				dragonBattleBuilder.setDragonMaxHealth(selected.getHealth());
+				dragonBattleBuilder.setDragonSpeedMultiplier(selected.getSpeed());
+				dragonBattleBuilder.setDragonGlowColor(selected.getColour());
+				dragonBattleBuilder.setBossBarColor(selected.getColour());
+
+				dragonFightsObject.setActiveCharacteristic(selected.serialize());
+			}
+		}
+
 		CustomDragonBattle battle = dragonBattleBuilder.build();
 
 		// start the battle
@@ -378,18 +556,156 @@ public class DragonFightManager
 
 
 	/**
-	 * This is a battle task timer. It should be called just once for each battle.
-	 * TODO: probably need to implement max active battles at once.
+	 * Registers a battle for ticking. If no active battles existed before,
+	 * this starts the single consolidated tick task.
 	 * @param databaseObject The database object.
 	 * @param battle Battle that must be started.
-	 * @param delay The delay after which task will start to run.
+	 * @param delay Unused, kept for API compatibility.
 	 */
 	public void startBattleTask(DragonFightsObject databaseObject, CustomDragonBattle battle, long delay)
 	{
-		Bukkit.getScheduler().runTaskTimer(BentoBox.getInstance(),
-			new BattleTick(databaseObject, battle),
-			delay,
-			1);
+		if (databaseObject.getDragonsKilled() == 0)
+		{
+			this.portalCleanupState.put(databaseObject.getUniqueId(), new int[]{0});
+		}
+
+		this.ensureTickTaskRunning();
+	}
+
+
+	/**
+	 * Starts the single consolidated tick task if it is not already running.
+	 */
+	private void ensureTickTaskRunning()
+	{
+		if (this.tickTask == null || this.tickTask.isCancelled())
+		{
+			this.tickTask = Bukkit.getScheduler().runTaskTimer(
+				BentoBox.getInstance(),
+				this::tickAllBattles,
+				1,
+				1);
+		}
+	}
+
+
+	/**
+	 * Stops the consolidated tick task if it is running.
+	 * Called when there are no active battles or no players in end worlds.
+	 */
+	private void stopTickTask()
+	{
+		if (this.tickTask != null && !this.tickTask.isCancelled())
+		{
+			this.tickTask.cancel();
+			this.tickTask = null;
+		}
+	}
+
+
+	/**
+	 * Called by player enter/leave events to start or stop the tick task
+	 * based on whether any players are in managed end worlds.
+	 */
+	public void checkTickTaskNeeded()
+	{
+		if (this.generatedBattles.isEmpty())
+		{
+			this.stopTickTask();
+			return;
+		}
+
+		boolean anyPlayerInEnd = this.operationWorlds.stream()
+			.filter(w -> World.Environment.THE_END.equals(w.getEnvironment()))
+			.anyMatch(w -> !w.getPlayers().isEmpty());
+
+		if (anyPlayerInEnd)
+		{
+			this.ensureTickTaskRunning();
+		}
+		else
+		{
+			this.stopTickTask();
+		}
+	}
+
+
+	/**
+	 * Single consolidated tick that processes all active battles.
+	 */
+	private void tickAllBattles()
+	{
+		if (this.generatedBattles.isEmpty())
+		{
+			this.stopTickTask();
+			return;
+		}
+
+		List<String> finished = new ArrayList<>();
+
+		for (Map.Entry<String, CustomDragonBattle> entry : this.generatedBattles.entrySet())
+		{
+			String id = entry.getKey();
+			CustomDragonBattle battle = entry.getValue();
+			DragonFightsObject data = this.dragonFightsCache.get(id);
+
+			if (data == null || battle == null)
+			{
+				continue;
+			}
+
+			boolean loadedChunks;
+
+			if (battle.getLastDragonUUID() != null &&
+				battle.getLastDragonLocation() != null)
+			{
+				int chunkX = battle.getLastDragonLocation().getBlockX() >> 4;
+				int chunkZ = battle.getLastDragonLocation().getBlockZ() >> 4;
+
+				World world = data.getWorld();
+
+				loadedChunks = world != null && world.isChunkLoaded(chunkX, chunkZ);
+			}
+			else
+			{
+				loadedChunks = true;
+			}
+
+			if (loadedChunks)
+			{
+				battle.tickBattle();
+
+				int[] portalState = this.portalCleanupState.get(id);
+
+				if (portalState != null)
+				{
+					this.checkAndRemovePortalBlocks(data, battle, portalState);
+				}
+
+				if (battle.isFinished())
+				{
+					finished.add(id);
+				}
+			}
+		}
+
+		for (String id : finished)
+		{
+			DragonFightsObject data = this.dragonFightsCache.get(id);
+			CustomDragonBattle battle = this.generatedBattles.get(id);
+
+			if (data != null && battle != null)
+			{
+				this.finishTheBattle(data, battle);
+			}
+
+			this.portalCleanupState.remove(id);
+		}
+
+		if (this.generatedBattles.isEmpty())
+		{
+			this.stopTickTask();
+		}
 	}
 
 
@@ -400,16 +716,157 @@ public class DragonFightManager
 	 */
 	public void finishTheBattle(DragonFightsObject databaseObject, CustomDragonBattle battle)
 	{
+		boolean firstKill = databaseObject.getDragonsKilled() == 0;
+
+		if (firstKill)
+		{
+			this.openExitPortal(databaseObject, battle);
+		}
+
 		// Reset data to the null value.
 		databaseObject.setLatestBattleData("");
 		databaseObject.setDragonsKilled(databaseObject.getDragonsKilled() + 1);
 		databaseObject.setPortalLocation(battle.getGeneratedPortalLocation());
 
-		// Sava data.
+		this.handleDragonEggReward(databaseObject, battle, firstKill);
+
+		// Save data.
 		this.saveDragonFightsData(databaseObject);
 
 		// Remove battle from cache.
 		this.generatedBattles.remove(databaseObject.getUniqueId());
+	}
+
+
+	/**
+	 * Determines whether a dragon egg should be rewarded and places it if so.
+	 * @param databaseObject The database object.
+	 * @param battle The battle that just finished.
+	 * @param firstKill Whether this was the first dragon kill on this island.
+	 */
+	private void handleDragonEggReward(DragonFightsObject databaseObject,
+		CustomDragonBattle battle,
+		boolean firstKill)
+	{
+		String islandId = databaseObject.getUniqueId();
+
+		this.addon.log("Dragon killed on island " + islandId +
+			" (kill #" + databaseObject.getDragonsKilled() + ").");
+
+		if (firstKill)
+		{
+			if (this.addon.getSettings().isDragonEggDropOnFirstKill())
+			{
+				boolean placed = this.placeDragonEgg(databaseObject, battle);
+
+				this.addon.log("First kill on island " + islandId +
+					": dragon egg " + (placed ? "placed successfully." : "could not be placed (no valid air-above-bedrock location)."));
+			}
+			else
+			{
+				this.addon.log("First kill on island " + islandId +
+					": dragon egg not rewarded (drop-on-first-kill is disabled).");
+			}
+		}
+		else
+		{
+			double chance = this.addon.getSettings().getDragonEggDropChance();
+			double roll = ThreadLocalRandom.current().nextDouble();
+
+			if (roll < chance)
+			{
+				boolean placed = this.placeDragonEgg(databaseObject, battle);
+
+				this.addon.log("Subsequent kill on island " + islandId +
+					": dragon egg " + (placed ? "placed successfully" : "could not be placed (no valid air-above-bedrock location)") +
+					" (roll=" + String.format("%.4f", roll) + ", chance=" + chance + ").");
+			}
+			else
+			{
+				this.addon.log("Subsequent kill on island " + islandId +
+					": dragon egg not rewarded (roll=" + String.format("%.4f", roll) + ", chance=" + chance + ").");
+			}
+		}
+	}
+
+
+	/**
+	 * Places a dragon egg on top of bedrock in a 5x5x5 area centred on the exit portal pillar.
+	 * Only replaces AIR blocks that sit directly on top of BEDROCK.
+	 * @param databaseObject The database object.
+	 * @param battle The battle that just finished.
+	 * @return true if the egg was placed, false if no valid location was found.
+	 */
+	private boolean placeDragonEgg(DragonFightsObject databaseObject, CustomDragonBattle battle)
+	{
+		Vector portalLoc = battle.getGeneratedPortalLocation();
+		World world = databaseObject.getWorld();
+
+		if (world == null || portalLoc == null)
+		{
+			return false;
+		}
+
+		int cx = portalLoc.getBlockX();
+		int cy = portalLoc.getBlockY();
+		int cz = portalLoc.getBlockZ();
+
+		// Search a 5x5x5 volume centred above the portal for the highest bedrock with air above.
+		// Start from the top so the egg ends up at the highest valid spot (top of the pillar).
+		for (int dy = 4; dy >= 0; dy--)
+		{
+			for (int dx = -2; dx <= 2; dx++)
+			{
+				for (int dz = -2; dz <= 2; dz++)
+				{
+					Block candidate = world.getBlockAt(cx + dx, cy + dy, cz + dz);
+					Block below = world.getBlockAt(cx + dx, cy + dy - 1, cz + dz);
+
+					if (candidate.getType() == Material.AIR && below.getType() == Material.BEDROCK)
+					{
+						candidate.setType(Material.DRAGON_EGG);
+						return true;
+					}
+				}
+			}
+		}
+
+		return false;
+	}
+
+
+	/**
+	 * Places END_PORTAL blocks in the exit portal after the first dragon kill.
+	 * The portal inner ring is the 3x3 area (minus center) at the portal base level.
+	 * @param databaseObject The database object.
+	 * @param battle The battle that just finished.
+	 */
+	private void openExitPortal(DragonFightsObject databaseObject, CustomDragonBattle battle)
+	{
+		Vector portalLoc = battle.getGeneratedPortalLocation();
+		World world = databaseObject.getWorld();
+
+		if (world == null || portalLoc == null)
+		{
+			return;
+		}
+
+		int px = portalLoc.getBlockX();
+		int py = portalLoc.getBlockY();
+		int pz = portalLoc.getBlockZ();
+
+		for (int dx = -1; dx <= 1; dx++)
+		{
+			for (int dz = -1; dz <= 1; dz++)
+			{
+				if (dx == 0 && dz == 0)
+				{
+					continue;
+				}
+
+				world.getBlockAt(px + dx, py, pz + dz).setType(Material.END_PORTAL);
+			}
+		}
 	}
 
 
@@ -443,9 +900,8 @@ public class DragonFightManager
 	 */
 	public void grantAdvancements(Player player, Map<String, String> advancementList)
 	{
-		if (advancementList.isEmpty())
+		if (player == null || advancementList.isEmpty())
 		{
-			// No advancements in this category.
 			return;
 		}
 
@@ -473,110 +929,55 @@ public class DragonFightManager
 	}
 
 
-// ---------------------------------------------------------------------
-// Section: Classes
-// ---------------------------------------------------------------------
-
-
 	/**
-	 * This class process battle ticking.
+	 * Checks if the battle has generated END_PORTAL blocks and removes them.
+	 * This keeps the exit portal closed until the dragon is killed for the first time.
+	 * @param data The database object.
+	 * @param battle The battle.
+	 * @param portalState Single-element array tracking cleanup tick count.
+	 *                    Removed from the map when cleanup is done.
 	 */
-	private class BattleTick implements Consumer<BukkitTask>
+	private void checkAndRemovePortalBlocks(DragonFightsObject data,
+		CustomDragonBattle battle, int[] portalState)
 	{
-		/**
-		 * Instantiates a new Battle tick.
-		 *
-		 * @param databaseObject the database object
-		 * @param battle the battle
-		 */
-		protected BattleTick(DragonFightsObject databaseObject, CustomDragonBattle battle)
+		Vector portalLoc = battle.getGeneratedPortalLocation();
+		World world = data.getWorld();
+
+		if (world == null || portalLoc == null)
 		{
-			this.databaseObject = databaseObject;
-			this.battle = battle;
+			return;
 		}
 
-		@Override
-		public void accept(BukkitTask task)
+		int px = portalLoc.getBlockX();
+		int py = portalLoc.getBlockY();
+		int pz = portalLoc.getBlockZ();
+
+		if (world.getBlockAt(px + 1, py, pz).getType() == Material.END_PORTAL)
 		{
-			boolean loadedChunks;
-
-			if (this.continueChecks &&
-				this.battle.getLastDragonUUID() != null &&
-				this.battle.getLastDragonLocation() != null)
+			for (int dx = -1; dx <= 1; dx++)
 			{
-				int chunkX = this.battle.getLastDragonLocation().getBlockX() >> 4;
-				int chunkZ = this.battle.getLastDragonLocation().getBlockZ() >> 4;
-
-				// Get world.
-				World world = this.databaseObject.getWorld();
-
-				// Check if chunks are loaded try to find dragon entity.
-				if (world.isChunkLoaded(chunkX, chunkZ))
+				for (int dz = -1; dz <= 1; dz++)
 				{
-					// Find entity with a given id.
-					// Wait 10 seconds till restart the dragon
-					// Dragon exists... load the battle
-					loadedChunks = this.ticksWithoutDragons++ > 10 * 20 ||
-						!world.getNearbyEntities(
-							this.battle.getLastDragonLocation().toLocation(world),
-								32,
-								32,
-								32,
-								entity -> entity.getType().equals(EntityType.ENDER_DRAGON) &&
-									entity.getUniqueId().equals(this.battle.getLastDragonUUID())).
-							isEmpty();
-				}
-				else
-				{
-					loadedChunks = false;
+					if (dx == 0 && dz == 0)
+					{
+						continue;
+					}
+
+					Block block = world.getBlockAt(px + dx, py, pz + dz);
+
+					if (block.getType() == Material.END_PORTAL)
+					{
+						block.setType(Material.AIR);
+					}
 				}
 			}
-			else
-			{
-				// No portal location means that battle must be force started.
-				loadedChunks = true;
-			}
 
-			if (loadedChunks)
-			{
-				this.battle.tickBattle();
-
-				if (this.battle.isFinished())
-				{
-					// Save data
-					DragonFightManager.this.finishTheBattle(this.databaseObject, this.battle);
-					// Cancel task.
-					task.cancel();
-				}
-
-				this.continueChecks = false;
-			}
+			this.portalCleanupState.remove(data.getUniqueId());
 		}
-
-
-	// ---------------------------------------------------------------------
-	// Section: Variables
-	// ---------------------------------------------------------------------
-
-		/**
-		 * Boolean that enables entity searching.
-		 */
-		private boolean continueChecks = true;
-
-		/**
-		 * This method checks ticks without living dragon.
-		 */
-		private int ticksWithoutDragons;
-
-		/**
-		 * Database object instance.
-		 */
-		private final DragonFightsObject databaseObject;
-
-		/**
-		 * Battle object instance.
-		 */
-		private final CustomDragonBattle battle;
+		else if (++portalState[0] > 100)
+		{
+			this.portalCleanupState.remove(data.getUniqueId());
+		}
 	}
 
 
@@ -609,4 +1010,16 @@ public class DragonFightManager
 	 * Stores portal generator cache.
 	 */
 	private final Map<String, CustomDragonBattle> generatedBattles;
+
+	/**
+	 * Tracks portal cleanup tick count per island (first fight only).
+	 * Key = island unique id, Value = single-element int array for mutable tick counter.
+	 */
+	private final Map<String, int[]> portalCleanupState;
+
+	/**
+	 * The single consolidated tick task for all battles.
+	 * Null when no task is running (no battles or no players in end worlds).
+	 */
+	private BukkitTask tickTask;
 }

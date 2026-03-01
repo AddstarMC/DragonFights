@@ -3,8 +3,10 @@ package lv.id.bonne.dragonfights.config;
 
 import org.bukkit.boss.BarColor;
 import org.bukkit.boss.BarStyle;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -321,6 +323,28 @@ public class Settings implements ConfigObject
 
 
 	/**
+	 * Gets dragon characteristics.
+	 *
+	 * @return the dragon characteristics
+	 */
+	public List<String> getDragonCharacteristics()
+	{
+		return dragonCharacteristics;
+	}
+
+
+	/**
+	 * Sets dragon characteristics.
+	 *
+	 * @param dragonCharacteristics the dragon characteristics
+	 */
+	public void setDragonCharacteristics(List<String> dragonCharacteristics)
+	{
+		this.dragonCharacteristics = dragonCharacteristics;
+	}
+
+
+	/**
 	 * Gets summon advancement list.
 	 *
 	 * @return the summon advancement list
@@ -408,6 +432,50 @@ public class Settings implements ConfigObject
 	}
 
 
+	/**
+	 * Is dragon egg drop on first kill boolean.
+	 *
+	 * @return the boolean
+	 */
+	public boolean isDragonEggDropOnFirstKill()
+	{
+		return dragonEggDropOnFirstKill;
+	}
+
+
+	/**
+	 * Sets dragon egg drop on first kill.
+	 *
+	 * @param dragonEggDropOnFirstKill the dragon egg drop on first kill
+	 */
+	public void setDragonEggDropOnFirstKill(boolean dragonEggDropOnFirstKill)
+	{
+		this.dragonEggDropOnFirstKill = dragonEggDropOnFirstKill;
+	}
+
+
+	/**
+	 * Gets dragon egg drop chance.
+	 *
+	 * @return the dragon egg drop chance
+	 */
+	public double getDragonEggDropChance()
+	{
+		return dragonEggDropChance;
+	}
+
+
+	/**
+	 * Sets dragon egg drop chance.
+	 *
+	 * @param dragonEggDropChance the dragon egg drop chance
+	 */
+	public void setDragonEggDropChance(double dragonEggDropChance)
+	{
+		this.dragonEggDropChance = dragonEggDropChance;
+	}
+
+
 	// ---------------------------------------------------------------------
 	// Section: Variables
 	// ---------------------------------------------------------------------
@@ -477,6 +545,14 @@ public class Settings implements ConfigObject
 	@ConfigEntry(path = "battle.battle-seed")
 	private long battleSeed = 0;
 
+	@ConfigComment("List of dragon characteristics. One is randomly selected per battle.")
+	@ConfigComment("Format: COLOUR:HEALTH:SPEED")
+	@ConfigComment("COLOUR: glow colour and boss bar colour (PINK, BLUE, RED, GREEN, YELLOW, PURPLE, WHITE)")
+	@ConfigComment("HEALTH: starting health of the dragon (vanilla default is 200)")
+	@ConfigComment("SPEED: speed multiplier where 1.0 is the vanilla default")
+	@ConfigEntry(path = "battle.dragon-characteristics")
+	private List<String> dragonCharacteristics = new ArrayList<>(List.of("GREEN:200:1.0"));
+
 	@ConfigComment("Set of advancements that will be granted upon summoning dragon for the first time.")
 	@ConfigComment("This will be granted to all players who is in the end when dragon is summoned.")
 	@ConfigComment("Syntax: <advancement_id>: <criteria>")
@@ -511,6 +587,17 @@ public class Settings implements ConfigObject
 	@ConfigComment("Default value: {}")
 	@ConfigEntry(path = "advancements.killed")
 	private Map<String, String> killedAdvancementList = new HashMap<>();
+
+	@ConfigComment("")
+	@ConfigComment("Whether a dragon egg should be placed on the exit portal when the dragon is killed for the first time.")
+	@ConfigComment("Default value is true.")
+	@ConfigEntry(path = "dragon-egg.drop-on-first-kill")
+	private boolean dragonEggDropOnFirstKill = true;
+
+	@ConfigComment("The chance (0.0 to 1.0) that a dragon egg will be placed on subsequent dragon kills.")
+	@ConfigComment("0.0 means never, 1.0 means always. Default is 0.2 (20%).")
+	@ConfigEntry(path = "dragon-egg.drop-chance")
+	private double dragonEggDropChance = 0.2;
 
 	@ConfigComment("")
 	@ConfigComment("This list stores GameModes in which DragonFights addon should not work.")

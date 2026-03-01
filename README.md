@@ -2,64 +2,70 @@
 [![Discord](https://img.shields.io/discord/272499714048524288.svg?logo=discord)](https://discord.bentobox.world)
 [![Build Status](https://ci.codemc.io/buildStatus/icon?job=BONNePlayground/DragonFights)](https://ci.codemc.io/job/BONNePlayground/job/DragonFights/)
 
-This is DragonFights Addon for BentoBox plugin.  
+DragonFights addon for BentoBox — per-island Ender Dragon fights in the End.
 
-# INFO
+**Requirements:** Paper 1.21.11, Java 21, BentoBox.
 
-This addon does not work past Minecraft 1.20.4 due to changes how Minecraft handles entity registry. It used a loophole that allowed the introduction of a custom vanilla entity with custom AI tasks.
-Unfortunately, they removed it, so the addon needs a complete rework so it would use Vanilla EnderDragon AI.
+## Installation
 
-## How to install
-
-1. Place the addon jar in the addons folder of the BentoBox plugin.
+1. Put the addon jar in BentoBox’s `addons` folder.
 2. Restart the server.
-3. Change DragonFights/config.yml to suit your needs.
-4. Restart the server again.
+3. Adjust `DragonFights/config.yml` as needed.
+4. Restart again if you changed the config.
 
-## Configuration
+## Usage
 
-The latest configuration file with comments can be found [here](https://github.com/BONNePlayground/DragonFights/blob/develop/addon/src/main/resources/config.yml).
+Works only in game modes that have end islands enabled. No exit portal is required in the blueprint; placing an End Crystal on the centre bedrock will generate one.
 
-## How to use
+To summon a dragon, place 4 end crystals on the centre block on each side of the end trophy. This starts the summoning sequence.
 
-This addon works only in GameModes with enabled end islands.
-It is not required to have an exit portal in the end blueprint, as users can generate it by placing End Crystal on the bedrock block. It will automatically generate a new exit portal.
+## Dragon customisation
 
-To summon a new dragon players must place 4 end crystals on the middle block per each end trophy side. It will start the end dragon summoning sequence.
+In `config.yml` under `battle.dragon-characteristics` you can define dragon variants. One is chosen at random per fight.
 
-## FAQ
+- **Format:** `COLOUR:HEALTH:SPEED`
+- **COLOUR:** Glow and boss bar colour — `PINK`, `BLUE`, `RED`, `GREEN`, `YELLOW`, `PURPLE`, `WHITE`
+- **HEALTH:** Max health (vanilla default 200)
+- **SPEED:** Speed multiplier (1.0 = vanilla)
 
-1. **I have created end trophy but nothing happens.**
-
-    Hmm, it could be a bug in my system. Maybe you could fill the bug report?
-
-2. **My dragon was removed when I teleported to the end.**
-
-    This can happen if dragon was close to spawn position, and it is not added to "remove-mobs-whitelist" in gamemode config. It should be enough if you add ENDER_DRAGON to the whitelist.
-
-3. **There are no obsidian towers around the trophy.**
-
-    Obsidian towers will be generated after player initialize dragon fight. 
-   
-4. **Players can stop the dragon fight if they destroy end crystals.**
-
-   Yes, that is how it should work. If they destroy end crystals before dragon is summoned, battle is stopped.
-
-5. **How can I get this addon?**
-
-   The official releases can be found here: [Releases](https://github.com/BONNePlayground/DragonFights/releases)
-   
-   Development versions can be found here: [Releases](https://ci.codemc.io/job/BONNePlayground/job/DragonFights/)
+Boss bar colour and style can be set globally under `boss-bar` in the config.
 
 ## Placeholders
 
-Addon currently have 2 placeholders:
-- `[gamemode]_dragonsfights_killed_dragon_count` - returns number of killed dragons on user.
-- `[gamemode]_dragonsfights_visited_killed_dragon_count` - returns number of killed dragons on visited island.
+Use with BentoBox’s placeholder system; they are prefixed by the game mode (e.g. `BSkyBlock_dragonfights_kills`).
+
+| Placeholder | Description |
+|-------------|-------------|
+| `%<gamemode>_dragonfights_kills%` | Dragons killed on the user’s island |
+| `%<gamemode>_dragonfights_visited_kills%` | Dragons killed on the island the user is on |
+| `%<gamemode>_dragonfights_alive%` | Whether a dragon is currently alive on the user’s island |
+| `%<gamemode>_dragonfights_visited_alive%` | Whether a dragon is alive on the island the user is on |
+
+## Rewards
+
+- **Advancements** (config: `advancements`): Grant on first summon, resummon, to the killer, and to everyone in the End when the dragon dies. Use standard advancement IDs and criteria.
+- **Dragon egg** (config: `dragon-egg`): Optionally drop on first kill; subsequent kills use a configurable chance (e.g. `drop-chance: 0.2` for 20%).
+
+## Configuration
+
+See [config.yml](https://github.com/BONNePlayground/DragonFights/blob/develop/src/main/resources/config.yml) for the full file and comments. Main options: battle (towers, start-on-join, music, fog), dragon characteristics, advancements, and dragon-egg behaviour.
+
+## FAQ
+
+1. **End trophy created but nothing happens.**  
+   Ensure the game mode has end islands enabled and the setup is correct. If it still fails, report a bug.
+
+2. **Dragon disappeared when I teleported to the End.**  
+   Add `ENDER_DRAGON` to the game mode’s “remove-mobs-whitelist” so the dragon isn’t cleared.
+
+3. **No obsidian towers.**  
+   Towers are generated when a player starts a dragon fight.
+
+4. **Where to get the original addon?**  
+   [Releases](https://github.com/BONNePlayground/DragonFights/releases) — dev builds: [CI](https://ci.codemc.io/job/BONNePlayground/job/DragonFights/).
 
 ## Compatibility
 
-- [x] BentoBox 1.17
-- [x] Spigot 1.17
-
-Addon is not compatible with Older BentoBox and Spigot version. It requires Java 16+.
+- Paper **1.21.11**
+- Java **21**
+- BentoBox 1.23.0 or compatible

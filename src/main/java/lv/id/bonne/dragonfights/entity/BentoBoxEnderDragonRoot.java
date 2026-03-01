@@ -1,42 +1,11 @@
-//
-// Created by BONNe
-// Copyright - 2020
-//
-
-
 package lv.id.bonne.dragonfights.entity;
 
 
-import org.bukkit.entity.EnderDragon;
-import java.util.Collection;
-import java.util.Collections;
-
-import io.github.iltotore.customentity.BiomeSpawn;
-import io.github.iltotore.customentity.CreatureType;
-import io.github.iltotore.customentity.type.CompositeEntityRoot;
-import io.github.iltotore.customentity.util.ServerVersion;
-
-
 /**
- * This class allows to load ender dragon for different minecraft versions.
+ * Entity type definition for the custom BentoBox ender dragon (1.21 only).
  */
-public class BentoBoxEnderDragonRoot extends CompositeEntityRoot<EnderDragon>
+public class BentoBoxEnderDragonRoot implements EntityTypeDefinition
 {
-	/**
-	 * Base entity key.
-	 * @return "ender_dragon"
-	 */
-	@Override
-	public String getBaseKey()
-	{
-		return "ender_dragon";
-	}
-
-
-	/**
-	 * Custom entity key. For summoning.
-	 * @return "bentobox_ender_dragon"
-	 */
 	@Override
 	public String getKey()
 	{
@@ -44,57 +13,9 @@ public class BentoBoxEnderDragonRoot extends CompositeEntityRoot<EnderDragon>
 	}
 
 
-	/**
-	 * Creature type.
-	 * @return Type of the creature.
-	 */
 	@Override
-	public CreatureType getCreatureType()
+	public String getBaseKey()
 	{
-		return CreatureType.MONSTER;
-	}
-
-
-	/**
-	 * Indicates if vanilla entity must be overwritten with it.
-	 * @param version ServerVersion on which entity is created.
-	 * @return false always.
-	 */
-	@Override
-	public boolean isVanilla(ServerVersion version)
-	{
-		return false;
-	}
-
-
-	/**
-	 * Biomes where entity should be spawned.
-	 * @param version ServerVersion on which entity is created.
-	 * @return Empty collection.
-	 */
-	@Override
-	public Collection<BiomeSpawn> getSpawns(ServerVersion version)
-	{
-		// No natural spawning.
-		return Collections.emptyList();
-	}
-
-
-	// ---------------------------------------------------------------------
-	// Section: Static method calls on construction
-	// ---------------------------------------------------------------------
-
-
-	/**
-	 * Populate entities based on server version.
-	 */
-	{
-		this.setVersion(ServerVersion.v1_19_1, lv.id.bonne.dragonfights.v1_19_R1.entity.BentoBoxEnderDragonType::new);
-		this.setVersion(ServerVersion.v1_19_2, lv.id.bonne.dragonfights.v1_19_R2.entity.BentoBoxEnderDragonType::new);
-		this.setVersion(ServerVersion.v1_19_3, lv.id.bonne.dragonfights.v1_19_R3.entity.BentoBoxEnderDragonType::new);
-		this.setVersion(ServerVersion.v1_20, lv.id.bonne.dragonfights.v1_20_R1.entity.BentoBoxEnderDragonType::new);
-		this.setVersion(ServerVersion.v1_20_2, lv.id.bonne.dragonfights.v1_20_R2.entity.BentoBoxEnderDragonType::new);
-		this.setVersion(ServerVersion.v1_20_3, lv.id.bonne.dragonfights.v1_20_R3.entity.BentoBoxEnderDragonType::new);
+		return "ender_dragon";
 	}
 }
-

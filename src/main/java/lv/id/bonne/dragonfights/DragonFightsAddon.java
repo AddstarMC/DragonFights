@@ -6,7 +6,7 @@ import org.bukkit.World;
 import java.util.Optional;
 
 
-import io.github.iltotore.customentity.CustomRegistry;
+import lv.id.bonne.dragonfights.api.CustomRegistry;
 import lv.id.bonne.dragonfights.config.Settings;
 import lv.id.bonne.dragonfights.entity.BentoBoxEnderDragonRoot;
 import lv.id.bonne.dragonfights.entity.CustomEntityAPI;
@@ -105,6 +105,8 @@ public class DragonFightsAddon extends Addon
 	{
 		super.allLoaded();
 
+		this.log("allLoaded() called. State=" + this.getState());
+
 		if (this.getState() == State.ENABLED)
 		{
 			this.addonManager.load();
@@ -142,9 +144,8 @@ public class DragonFightsAddon extends Addon
 		final String addonName = this.getDescription().getName().toLowerCase();
 		final World world = addon.getOverWorld();
 
-		// Placeholder returns currently active count.
 		this.getPlugin().getPlaceholdersManager().registerPlaceholder(addon,
-			addonName + "_killed_dragon_count",
+			addonName + "_kills",
 			user ->
 			{
 				Island island = this.getIslands().getIsland(world, user);
@@ -155,25 +156,52 @@ public class DragonFightsAddon extends Addon
 				}
 				else
 				{
-					// Return empty string as user do not have an island.
 					return "0";
 				}
 			});
 
-		// Placeholder returns maximal active generator count, that user can activate.
 		this.getPlugin().getPlaceholdersManager().registerPlaceholder(addon,
-			addonName + "_visited_killed_dragon_count",
+			addonName + "_visited_kills",
 			user ->
 			{
 				if (!addon.inWorld(user.getLocation()))
 				{
-					// Return empty string as user is not on the island.
 					return "";
 				}
 
 				return this.getIslands().getIslandAt(user.getLocation()).
 					map(island -> String.valueOf(this.getAddonManager().getIslandData(island).getDragonsKilled())).
 					orElse("0");
+			});
+
+		this.getPlugin().getPlaceholdersManager().registerPlaceholder(addon,
+			addonName + "_alive",
+			user ->
+			{
+				Island island = this.getIslands().getIsland(world, user);
+
+				if (island != null)
+				{
+					return String.valueOf(this.getAddonManager().isDragonAlive(island.getUniqueId()));
+				}
+				else
+				{
+					return "false";
+				}
+			});
+
+		this.getPlugin().getPlaceholdersManager().registerPlaceholder(addon,
+			addonName + "_visited_alive",
+			user ->
+			{
+				if (!addon.inWorld(user.getLocation()))
+				{
+					return "";
+				}
+
+				return this.getIslands().getIslandAt(user.getLocation()).
+					map(island -> String.valueOf(this.getAddonManager().isDragonAlive(island.getUniqueId()))).
+					orElse("false");
 			});
 	}
 
@@ -233,8 +261,9 @@ public class DragonFightsAddon extends Addon
 	@Override
 	public void onDisable()
 	{
-		// onDisable we would like to save existing settings. It is not necessary for
-		// addons that does not have interface for settings editing!
+		this.log("onDisable() called. addonManager=" + (this.addonManager != null) +
+			" settings=" + (this.settings != null));
+
 		if (this.addonManager != null)
 		{
 			this.addonManager.save();
@@ -244,6 +273,8 @@ public class DragonFightsAddon extends Addon
 		{
 			new Config<>(this, Settings.class).saveConfigObject(this.settings);
 		}
+
+		this.log("onDisable() complete.");
 	}
 
 

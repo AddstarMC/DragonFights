@@ -126,6 +126,28 @@ public class DragonFightsObject implements DataObject
 
 
 	/**
+	 * Gets active characteristic.
+	 *
+	 * @return the active characteristic string, or null if none is set
+	 */
+	public @Nullable String getActiveCharacteristic()
+	{
+		return activeCharacteristic;
+	}
+
+
+	/**
+	 * Sets active characteristic.
+	 *
+	 * @param activeCharacteristic the active characteristic string
+	 */
+	public void setActiveCharacteristic(@Nullable String activeCharacteristic)
+	{
+		this.activeCharacteristic = activeCharacteristic;
+	}
+
+
+	/**
 	 * Gets dragons killed.
 	 *
 	 * @return the dragons killed
@@ -181,4 +203,10 @@ public class DragonFightsObject implements DataObject
 	 */
 	@Expose
 	private long dragonsKilled = 0;
+
+	/**
+	 * The currently active dragon characteristic string (COLOUR:HEALTH:SPEED).
+	 */
+	@Expose
+	private @Nullable String activeCharacteristic;
 }

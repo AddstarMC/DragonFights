@@ -17,13 +17,20 @@ import world.bentobox.bentobox.api.addons.Pladdon;
 /**
  * @author bonne
  */
-@Plugin(name="DragonFights", version="1.7.0")
-@ApiVersion(ApiVersion.Target.v1_19)
+@Plugin(name="DragonFights", version="1.9.0")
+@ApiVersion(ApiVersion.Target.v1_20)
 public class DragonFightsPladdon extends Pladdon
 {
     @Override
     public Addon getAddon()
     {
-        return new DragonFightsAddon();
+        if (this.addon == null)
+        {
+            this.addon = new DragonFightsAddon();
+        }
+
+        return this.addon;
     }
+
+    private DragonFightsAddon addon;
 }

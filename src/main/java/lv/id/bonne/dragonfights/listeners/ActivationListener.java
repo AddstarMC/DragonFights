@@ -10,6 +10,7 @@ package lv.id.bonne.dragonfights.listeners;
 import org.bukkit.*;
 import org.bukkit.block.BlockFace;
 import org.bukkit.entity.EnderCrystal;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -19,6 +20,8 @@ import org.bukkit.event.entity.EntitySpawnEvent;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.util.Vector;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 import lv.id.bonne.custombattle.CustomDragonBattle;
@@ -28,6 +31,7 @@ import lv.id.bonne.dragonfights.managers.DragonFightManager;
 import world.bentobox.bentobox.api.user.User;
 import world.bentobox.bentobox.database.objects.Island;
 import world.bentobox.bentobox.managers.RanksManager;
+
 
 
 /**
@@ -137,22 +141,25 @@ public class ActivationListener implements Listener
 		// Summon crystals.
 		World world = event.getPlayer().getWorld();
 
-		world.spawnEntity(generatedPortalLocation.toLocation(world).add(3.5, 1, 0.5), EntityType.ENDER_CRYSTAL);
-		world.spawnEntity(generatedPortalLocation.toLocation(world).add(-2.5, 1, 0.5), EntityType.ENDER_CRYSTAL);
-		world.spawnEntity(generatedPortalLocation.toLocation(world).add(0.5, 1, 3.5), EntityType.ENDER_CRYSTAL);
-		world.spawnEntity(generatedPortalLocation.toLocation(world).add(0.5, 1, -2.5), EntityType.ENDER_CRYSTAL);
+		world.spawnEntity(generatedPortalLocation.toLocation(world).add(3.5, 1, 0.5), EntityType.END_CRYSTAL);
+		world.spawnEntity(generatedPortalLocation.toLocation(world).add(-2.5, 1, 0.5), EntityType.END_CRYSTAL);
+		world.spawnEntity(generatedPortalLocation.toLocation(world).add(0.5, 1, 3.5), EntityType.END_CRYSTAL);
+		world.spawnEntity(generatedPortalLocation.toLocation(world).add(0.5, 1, -2.5), EntityType.END_CRYSTAL);
 		// The battle should start.
 	}
 
 
 	/**
 	 * This event passes crystal placement event to the correct ender dragon battle instance.
+	 * Only crystals placed on specific exit portal positions are accepted:
+	 * - Initial spawn (no previous kills, no active battle): crystal on top of center pillar
+	 * - Respawn (previous kills, or battle already in progress): crystal on one of 4 edge positions
 	 * @param event Entity Spawn event that must be monitored.
 	 */
 	@EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
 	public void onCrystalPlacement(EntitySpawnEvent event)
 	{
-		if (event.getEntityType() != EntityType.ENDER_CRYSTAL)
+		if (event.getEntityType() != EntityType.END_CRYSTAL)
 		{
 			// Not an ender crystal.
 			return;
@@ -178,8 +185,8 @@ public class ActivationListener implements Listener
 			return;
 		}
 
-		Location location = event.getLocation().getBlock().getRelative(BlockFace.DOWN).getLocation();
-		Optional<Island> optionalIsland = this.addon.getPlugin().getIslands().getIslandAt(location);
+		Location bedrockLocation = event.getLocation().getBlock().getRelative(BlockFace.DOWN).getLocation();
+		Optional<Island> optionalIsland = this.addon.getPlugin().getIslands().getIslandAt(bedrockLocation);
 
 		if (!optionalIsland.isPresent())
 		{
@@ -196,27 +203,89 @@ public class ActivationListener implements Listener
 			return;
 		}
 
+		DragonFightsObject islandData = this.addonManager.getIslandData(island);
+
+		Vector portalLocation = islandData.getPortalLocation() != null ?
+			islandData.getPortalLocation() : island.getCenter().toVector();
+
+		int portalX = portalLocation.getBlockX();
+		int portalY = portalLocation.getBlockY();
+		int portalZ = portalLocation.getBlockZ();
+
+		int bedrockX = bedrockLocation.getBlockX();
+		int bedrockY = bedrockLocation.getBlockY();
+		int bedrockZ = bedrockLocation.getBlockZ();
+
 		Optional<CustomDragonBattle> optionalBattle =
 			this.addonManager.getDragonBattle(island.getUniqueId());
 
-		CustomDragonBattle battle = optionalBattle.orElseGet(() ->
-			this.addonManager.createDragonBattle(location.getWorld(), island));
-
-		if (battle == null)
+		if (!optionalBattle.isPresent() && islandData.getDragonsKilled() == 0)
 		{
-			// TODO: Error message. Something went wrong.
-			return;
-		}
+			// Initial spawn: crystal must be on top of the center bedrock pillar (±1 Y tolerance)
+			if (bedrockX != portalX || bedrockZ != portalZ || bedrockY < portalY - 1)
+			{
+				return;
+			}
 
-		if (battle.isFinished())
+			CustomDragonBattle battle = this.addonManager.createDragonBattle(world, island);
+
+			if (battle == null)
+			{
+				return;
+			}
+
+			Bukkit.getScheduler().runTask(this.addon.getPlugin(),
+				tick -> battle.onCrystalPlacement((EnderCrystal) event.getEntity()));
+		}
+		else
 		{
-			// Restart battle ticking, as new crystal will be placed.
-			this.addonManager.startBattleTask(this.addonManager.getIslandData(island), battle, 0);
-		}
+			// Respawn or battle in progress: crystal must be on bedrock near the
+			// exit portal, but NOT on the center pillar itself.
+			if (bedrockX == portalX && bedrockZ == portalZ)
+			{
+				// On the center pillar -- not a respawn crystal.
+				return;
+			}
 
-		// If battle is present then pass crystal placement to it 1 tick later.
-		Bukkit.getScheduler().runTask(this.addon.getPlugin(),
-			tick -> battle.onCrystalPlacement((EnderCrystal) event.getEntity()));
+			if (Math.abs(bedrockX - portalX) > 5 || Math.abs(bedrockZ - portalZ) > 5)
+			{
+				// Too far from the portal to be a respawn crystal.
+				return;
+			}
+
+			// Count end crystals near the portal (excluding center pillar) -- need 4.
+			// Note that this does not include the crystal that is being placed (so it's N-1 crystals total)
+			List<EnderCrystal> edgeCrystals =
+				this.findPortalEdgeCrystals(world, portalX, portalY, portalZ);
+
+			if ((edgeCrystals.size()+1) < 4)
+			{
+				this.addon.log("Only " + (edgeCrystals.size()+1) + " crystals near the portal, but we need 4");
+				return;
+			}
+
+			CustomDragonBattle battle = optionalBattle.orElseGet(() ->
+				this.addonManager.createDragonBattle(bedrockLocation.getWorld(), island));
+
+			if (battle == null)
+			{
+				return;
+			}
+
+			if (battle.isFinished())
+			{
+				this.addon.log("Battle is finished, starting a new one");
+				this.addonManager.startBattleTask(this.addonManager.getIslandData(island), battle, 0);
+			}
+
+			Bukkit.getScheduler().runTask(this.addon.getPlugin(), tick ->
+			{
+				for (EnderCrystal crystal : edgeCrystals)
+				{
+					battle.onCrystalPlacement(crystal);
+				}
+			});
+		}
 	}
 
 
@@ -227,7 +296,7 @@ public class ActivationListener implements Listener
 	@EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
 	public void onCrystalDamage(EntityDamageEvent event)
 	{
-		if (event.getEntityType() != EntityType.ENDER_CRYSTAL)
+		if (event.getEntityType() != EntityType.END_CRYSTAL)
 		{
 			// Not an ender crystal.
 			return;
@@ -263,6 +332,44 @@ public class ActivationListener implements Listener
 		customDragonBattle.ifPresent(battle ->
 			Bukkit.getScheduler().runTask(this.addon.getPlugin(),
 				tick -> battle.onCrystalDamage((EnderCrystal) event.getEntity())));
+	}
+
+
+// ---------------------------------------------------------------------
+// Section: Helper Methods
+// ---------------------------------------------------------------------
+
+
+	/**
+	 * Finds all end crystal entities near the exit portal, excluding any on the center pillar.
+	 * Searches within a 5-block XZ radius and 4-block Y radius of the portal base.
+	 * @param world The world to search.
+	 * @param portalX Portal center X.
+	 * @param portalY Portal center Y.
+	 * @param portalZ Portal center Z.
+	 * @return List of end crystals found near the portal edge.
+	 */
+	private List<EnderCrystal> findPortalEdgeCrystals(World world, int portalX, int portalY, int portalZ)
+	{
+		List<EnderCrystal> crystals = new ArrayList<>();
+		Location portalCenter = new Location(world,
+			portalX + 0.5, portalY + 1.5, portalZ + 0.5);
+
+		for (Entity entity : world.getNearbyEntities(portalCenter, 5, 4, 5))
+		{
+			if (entity.getType() == EntityType.END_CRYSTAL)
+			{
+				int entityBlockX = entity.getLocation().getBlockX();
+				int entityBlockZ = entity.getLocation().getBlockZ();
+
+				if (entityBlockX != portalX || entityBlockZ != portalZ)
+				{
+					crystals.add((EnderCrystal) entity);
+				}
+			}
+		}
+
+		return crystals;
 	}
 
 
