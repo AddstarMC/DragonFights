@@ -8,8 +8,10 @@ import org.bukkit.scoreboard.Scoreboard;
 import org.bukkit.scoreboard.Team;
 import org.bukkit.util.Vector;
 import org.bukkit.craftbukkit.entity.CraftEntity;
+import org.bukkit.craftbukkit.entity.CraftPlayer;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.WallTorchBlock;
 import org.bukkit.entity.EnderCrystal;
 import net.minecraft.world.entity.EntityType;
 import org.bukkit.event.entity.CreatureSpawnEvent;
@@ -33,6 +35,8 @@ import net.minecraft.nbt.CompoundTag;
 import org.bukkit.craftbukkit.util.CraftChatMessage;
 import net.minecraft.core.Direction;
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Set;
 import net.minecraft.world.BossEvent;
 import java.util.logging.Logger;
 import net.minecraft.world.entity.boss.enderdragon.EndCrystal;
@@ -318,9 +322,22 @@ public class BentoBoxDragonBattle implements CustomDragonBattle
                 }
                 if (this.enderDragon != null && this.bossBattle != null) {
                     this.bossBattle.setProgress(this.enderDragon.getHealth() / this.enderDragon.getMaxHealth());
-                    this.world.players().stream()
-                        .filter(p -> p.distanceToSqr((double)this.centerBeamLocation.getX(), (double)this.centerBeamLocation.getY(), (double)this.centerBeamLocation.getZ()) < this.range * this.range)
-                        .forEach(this.bossBattle::addPlayer);
+
+                    double rangeSq = this.range * this.range;
+                    Set<ServerPlayer> inRange = new HashSet<>();
+                    for (ServerPlayer p : this.world.players()) {
+                        if (p.distanceToSqr((double)this.centerBeamLocation.getX(), (double)this.centerBeamLocation.getY(), (double)this.centerBeamLocation.getZ()) < rangeSq) {
+                            inRange.add(p);
+                        }
+                    }
+
+                    inRange.forEach(this.bossBattle::addPlayer);
+
+                    for (ServerPlayer tracked : new ArrayList<>(this.bossBattle.getPlayers())) {
+                        if (!inRange.contains(tracked)) {
+                            this.bossBattle.removePlayer(tracked);
+                        }
+                    }
                     break;
                 }
                 break;
@@ -466,6 +483,13 @@ public class BentoBoxDragonBattle implements CustomDragonBattle
         }
     }
     
+    @Override
+    public void removeBossBarPlayer(org.bukkit.entity.Player player) {
+        if (this.bossBattle != null && player instanceof CraftPlayer craftPlayer) {
+            this.bossBattle.removePlayer(craftPlayer.getHandle());
+        }
+    }
+    
     @Nullable
     private BentoBoxEnderDragon createNewDragon() {
         final EntityType<BentoBoxEnderDragon> type = NMSEntityRegistry.getRegisteredEntityType();
@@ -508,25 +532,36 @@ public class BentoBoxDragonBattle implements CustomDragonBattle
     private void generateExitPortal() {
         final BlockPos center = this.exitPortalLocation;
         BentoBoxDragonBattle.LOG.info("generateExitPortal at " + center.getX() + "," + center.getY() + "," + center.getZ() + " world=" + String.valueOf(this.world.dimension()));
-        for (int x = -2; x <= 2; ++x) {
-            for (int z = -2; z <= 2; ++z) {
-                if (Math.abs(x) != 2 || Math.abs(z) != 2) {
-                    this.world.setBlock(center.offset(x, -1, z), Blocks.BEDROCK.defaultBlockState(), 3);
-                    final BlockPos surfacePos = center.offset(x, 0, z);
-                    if (Math.abs(x) >= 2 || Math.abs(z) >= 2 || (x == 0 && z == 0)) {
+        for (int x = -3; x <= 3; ++x) {
+            for (int z = -3; z <= 3; ++z) {
+                final int distSq = x * x + z * z;
+                if (distSq < 13) {
+                    this.world.setBlock(center.offset(x, -2, z), Blocks.END_STONE.defaultBlockState(), 3);
+                    final BlockPos surfacePos = center.offset(x, -1, z);
+                    if (x == 0 && z == 0) {
                         this.world.setBlock(surfacePos, Blocks.BEDROCK.defaultBlockState(), 3);
                     }
+                    else if (distSq < 7) {
+                        this.world.setBlock(surfacePos, Blocks.AIR.defaultBlockState(), 3);
+                    }
                     else {
-                        this.world.setBlock(surfacePos, Blocks.END_PORTAL.defaultBlockState(), 3);
+                        this.world.setBlock(surfacePos, Blocks.BEDROCK.defaultBlockState(), 3);
                     }
                 }
             }
         }
-        for (int y = 1; y <= 3; ++y) {
+        for (int y = 0; y <= 2; ++y) {
             this.world.setBlock(center.offset(0, y, 0), Blocks.BEDROCK.defaultBlockState(), 3);
         }
-        this.world.setBlock(center.offset(0, 4, 0), Blocks.TORCH.defaultBlockState(), 3);
-        BentoBoxDragonBattle.LOG.info("Exit portal generated: 8 END_PORTAL blocks + bedrock frame at Y=" + center.getY());
+        this.world.setBlock(center.offset(1, 1, 0),
+            Blocks.WALL_TORCH.defaultBlockState().setValue(WallTorchBlock.FACING, Direction.EAST), 3);
+        this.world.setBlock(center.offset(-1, 1, 0),
+            Blocks.WALL_TORCH.defaultBlockState().setValue(WallTorchBlock.FACING, Direction.WEST), 3);
+        this.world.setBlock(center.offset(0, 1, 1),
+            Blocks.WALL_TORCH.defaultBlockState().setValue(WallTorchBlock.FACING, Direction.SOUTH), 3);
+        this.world.setBlock(center.offset(0, 1, -1),
+            Blocks.WALL_TORCH.defaultBlockState().setValue(WallTorchBlock.FACING, Direction.NORTH), 3);
+        BentoBoxDragonBattle.LOG.info("Exit portal generated (unlit): bedrock frame + pillar at Y=" + (center.getY() - 1));
     }
     
     private void precomputeTowers() {

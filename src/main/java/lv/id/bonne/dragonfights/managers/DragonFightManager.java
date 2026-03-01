@@ -604,6 +604,21 @@ public class DragonFightManager
 
 
 	/**
+	 * Removes the given player from all active battle boss bars.
+	 * Called when a player leaves an End world or disconnects to ensure the
+	 * boss bar is cleaned up immediately rather than waiting for the next tick.
+	 * @param player The player to remove.
+	 */
+	public void removePlayerFromAllBossBars(Player player)
+	{
+		for (CustomDragonBattle battle : this.generatedBattles.values())
+		{
+			battle.removeBossBarPlayer(player);
+		}
+	}
+
+
+	/**
 	 * Called by player enter/leave events to start or stop the tick task
 	 * based on whether any players are in managed end worlds.
 	 */
@@ -718,10 +733,7 @@ public class DragonFightManager
 	{
 		boolean firstKill = databaseObject.getDragonsKilled() == 0;
 
-		if (firstKill)
-		{
-			this.openExitPortal(databaseObject, battle);
-		}
+		this.openExitPortal(databaseObject, battle);
 
 		// Reset data to the null value.
 		databaseObject.setLatestBattleData("");
@@ -836,8 +848,9 @@ public class DragonFightManager
 
 
 	/**
-	 * Places END_PORTAL blocks in the exit portal after the first dragon kill.
-	 * The portal inner ring is the 3x3 area (minus center) at the portal base level.
+	 * Places END_PORTAL blocks in the exit portal after the dragon is killed.
+	 * The portal inner ring is the circular area (radius < sqrt(7)) at the portal base level,
+	 * excluding the center bedrock pillar.
 	 * @param databaseObject The database object.
 	 * @param battle The battle that just finished.
 	 */
@@ -852,19 +865,22 @@ public class DragonFightManager
 		}
 
 		int px = portalLoc.getBlockX();
-		int py = portalLoc.getBlockY();
+		int py = portalLoc.getBlockY() - 1;
 		int pz = portalLoc.getBlockZ();
 
-		for (int dx = -1; dx <= 1; dx++)
+		for (int dx = -2; dx <= 2; dx++)
 		{
-			for (int dz = -1; dz <= 1; dz++)
+			for (int dz = -2; dz <= 2; dz++)
 			{
 				if (dx == 0 && dz == 0)
 				{
 					continue;
 				}
 
-				world.getBlockAt(px + dx, py, pz + dz).setType(Material.END_PORTAL);
+				if (dx * dx + dz * dz < 7)
+				{
+					world.getBlockAt(px + dx, py, pz + dz).setType(Material.END_PORTAL);
+				}
 			}
 		}
 	}
@@ -949,25 +965,28 @@ public class DragonFightManager
 		}
 
 		int px = portalLoc.getBlockX();
-		int py = portalLoc.getBlockY();
+		int py = portalLoc.getBlockY() - 1;
 		int pz = portalLoc.getBlockZ();
 
 		if (world.getBlockAt(px + 1, py, pz).getType() == Material.END_PORTAL)
 		{
-			for (int dx = -1; dx <= 1; dx++)
+			for (int dx = -2; dx <= 2; dx++)
 			{
-				for (int dz = -1; dz <= 1; dz++)
+				for (int dz = -2; dz <= 2; dz++)
 				{
 					if (dx == 0 && dz == 0)
 					{
 						continue;
 					}
 
-					Block block = world.getBlockAt(px + dx, py, pz + dz);
-
-					if (block.getType() == Material.END_PORTAL)
+					if (dx * dx + dz * dz < 7)
 					{
-						block.setType(Material.AIR);
+						Block block = world.getBlockAt(px + dx, py, pz + dz);
+
+						if (block.getType() == Material.END_PORTAL)
+						{
+							block.setType(Material.AIR);
+						}
 					}
 				}
 			}

@@ -54,6 +54,7 @@ public class JoinLeaveListener implements Listener
 
 	/**
 	 * Pauses or resumes the battle tick task when a player leaves the server.
+	 * Also removes the player from all boss bars to clean up server-side tracking.
 	 * @param event PlayerQuitEvent instance.
 	 */
 	@EventHandler(priority = EventPriority.MONITOR)
@@ -61,6 +62,7 @@ public class JoinLeaveListener implements Listener
 	{
 		if (World.Environment.THE_END.equals(event.getPlayer().getWorld().getEnvironment()))
 		{
+			this.addon.getAddonManager().removePlayerFromAllBossBars(event.getPlayer());
 			this.addon.getAddonManager().checkTickTaskNeeded();
 		}
 	}
@@ -68,6 +70,8 @@ public class JoinLeaveListener implements Listener
 
 	/**
 	 * Pauses or resumes the battle tick task when a player changes worlds.
+	 * When a player leaves the End, immediately removes them from all boss bars
+	 * so the bar does not linger on their client.
 	 * @param event PlayerChangedWorldEvent instance.
 	 */
 	@EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -75,6 +79,11 @@ public class JoinLeaveListener implements Listener
 	{
 		boolean wasEnd = World.Environment.THE_END.equals(event.getFrom().getEnvironment());
 		boolean isEnd = World.Environment.THE_END.equals(event.getPlayer().getWorld().getEnvironment());
+
+		if (wasEnd)
+		{
+			this.addon.getAddonManager().removePlayerFromAllBossBars(event.getPlayer());
+		}
 
 		if (wasEnd || isEnd)
 		{

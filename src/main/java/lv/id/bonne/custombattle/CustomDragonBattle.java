@@ -1,6 +1,7 @@
 package lv.id.bonne.custombattle;
 
 import java.util.UUID;
+import org.bukkit.entity.Player;
 import org.jetbrains.annotations.Nullable;
 import org.bukkit.util.Vector;
 import org.bukkit.entity.EnderCrystal;
@@ -27,4 +28,6 @@ public interface CustomDragonBattle
     
     @Nullable
     Vector getLastDragonLocation();
+
+    default void removeBossBarPlayer(Player player) {}
 }
